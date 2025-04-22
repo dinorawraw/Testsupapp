@@ -4,13 +4,26 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+
+// Criando o cliente Supabase diretamente no componente para evitar problemas de importação
+const supabaseUrl = "https://lmtxihtbvsfszywrzgeh.supabase.co"
+const supabaseKey =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtdHhpaHRidnNmc3p5d3J6Z2VoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMzY4NjksImV4cCI6MjA1OTYxMjg2OX0.Moi9zFo9l0TJV-0ueTC51BPj_HAFQoB3PKVsqmcoZ8U"
+
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+})
 
 export function AuthForm() {
   const [email, setEmail] = useState("")
@@ -19,24 +32,36 @@ export function AuthForm() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("login")
+  const [debugInfo, setDebugInfo] = useState<any>(null)
   const router = useRouter()
 
-  // Verificar se já existe uma sessão ativa
+  // Verificar conexão com Supabase ao carregar o componente
   useEffect(() => {
-    const checkSession = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        console.log("Sessão ativa encontrada:", data.session)
+    const checkConnection = async () => {
+      try {
+        // Teste simples para verificar se o Supabase está respondendo
+        const { data, error } = await supabase.from("profiles").select("count").limit(1)
+
+        if (error) {
+          console.error("Erro ao conectar com Supabase:", error)
+          setDebugInfo({ type: "connection_error", error })
+        } else {
+          console.log("Conexão com Supabase estabelecida com sucesso")
+          setDebugInfo({ type: "connection_success", data })
+        }
+      } catch (err) {
+        console.error("Exceção ao conectar com Supabase:", err)
+        setDebugInfo({ type: "connection_exception", error: err })
       }
     }
 
-    checkSession()
+    checkConnection()
   }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault() // Garantir que o formulário não seja enviado normalmente
+    e.preventDefault()
 
-    if (loading) return // Evitar múltiplos envios
+    if (loading) return
 
     // Validação básica
     if (!email || !password) {
@@ -46,40 +71,43 @@ export function AuthForm() {
 
     setLoading(true)
     setError(null)
+    setDebugInfo(null)
 
     try {
       console.log("Tentando fazer login com:", email)
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      // Usar try-catch para capturar qualquer erro durante a autenticação
+      let authResponse
+      try {
+        authResponse = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+      } catch (authError) {
+        console.error("Exceção durante signInWithPassword:", authError)
+        setDebugInfo({ type: "auth_exception", error: authError })
+        throw new Error(`Erro de autenticação: ${authError instanceof Error ? authError.message : "Erro desconhecido"}`)
+      }
 
-      console.log("Resposta do login:", { data, error })
+      const { data, error } = authResponse
+
+      console.log("Resposta completa do login:", { data, error })
+      setDebugInfo({ type: "auth_response", data, error })
 
       if (error) {
-        throw error
+        throw new Error(error.message || "Erro de autenticação")
       }
 
-      if (!data.session) {
-        throw new Error("Falha na autenticação. Nenhuma sessão retornada.")
+      if (!data?.session) {
+        throw new Error("Sessão não criada. Verifique suas credenciais.")
       }
 
-      console.log("Login bem-sucedido:", data.session)
-
-      // Verificar se o usuário está realmente autenticado antes de redirecionar
-      const { data: sessionData } = await supabase.auth.getSession()
-
-      if (sessionData.session) {
-        console.log("Sessão verificada, redirecionando...")
-        router.push("/dashboard")
-        router.refresh()
-      } else {
-        throw new Error("Falha ao iniciar sessão. Tente novamente.")
-      }
+      console.log("Login bem-sucedido, redirecionando...")
+      router.push("/dashboard")
+      router.refresh()
     } catch (error: any) {
-      console.error("Erro de login:", error)
-      setError(error.message || "Erro ao fazer login. Verifique suas credenciais.")
+      console.error("Erro durante o processo de login:", error)
+      setError(error.message || "Erro ao fazer login. Tente novamente.")
     } finally {
       setLoading(false)
     }
@@ -98,6 +126,7 @@ export function AuthForm() {
 
     setLoading(true)
     setError(null)
+    setDebugInfo(null)
 
     try {
       console.log("Tentando criar conta com:", email)
@@ -112,23 +141,22 @@ export function AuthForm() {
         },
       })
 
-      console.log("Resposta do cadastro:", { data, error })
+      console.log("Resposta completa do cadastro:", { data, error })
+      setDebugInfo({ type: "signup_response", data, error })
 
       if (error) {
-        throw error
+        throw new Error(error.message || "Erro ao criar conta")
       }
 
       if (data.session) {
-        // Se o usuário foi criado e já está autenticado
         console.log("Cadastro com autenticação imediata, redirecionando...")
         router.push("/dashboard")
         router.refresh()
       } else {
-        // Se o usuário precisa confirmar o email
         alert("Verifique seu email para confirmar o cadastro!")
       }
     } catch (error: any) {
-      console.error("Erro de cadastro:", error)
+      console.error("Erro durante o processo de cadastro:", error)
       setError(error.message || "Erro ao criar conta. Tente novamente.")
     } finally {
       setLoading(false)
@@ -149,7 +177,7 @@ export function AuthForm() {
         redirectTo: `${window.location.origin}/reset-password`,
       })
 
-      if (error) throw error
+      if (error) throw new Error(error.message)
 
       alert("Verifique seu email para redefinir sua senha!")
     } catch (error: any) {
@@ -164,7 +192,32 @@ export function AuthForm() {
     setPassword("")
     setFullName("")
     setError(null)
+    setDebugInfo(null)
     setActiveTab(value)
+  }
+
+  // Função para testar a conexão com o Supabase
+  const testConnection = async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Teste de conexão básico
+      const { data, error } = await supabase.from("profiles").select("count").limit(1)
+
+      if (error) {
+        throw new Error(`Erro de conexão: ${error.message}`)
+      }
+
+      setDebugInfo({ type: "test_connection", success: true, data })
+      alert("Conexão com Supabase estabelecida com sucesso!")
+    } catch (error: any) {
+      console.error("Erro ao testar conexão:", error)
+      setError(error.message || "Erro ao testar conexão com Supabase")
+      setDebugInfo({ type: "test_connection", success: false, error })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -221,6 +274,25 @@ export function AuthForm() {
                   disabled={loading}
                 />
               </div>
+
+              {/* Botão para testar conexão */}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full mt-2"
+                onClick={testConnection}
+                disabled={loading}
+              >
+                Testar Conexão com Supabase
+              </Button>
+
+              {/* Área de debug */}
+              {debugInfo && (
+                <div className="mt-4 p-2 bg-gray-100 rounded text-xs overflow-auto max-h-40">
+                  <p className="font-bold">Informações de Debug:</p>
+                  <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+                </div>
+              )}
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full" disabled={loading}>
@@ -277,6 +349,14 @@ export function AuthForm() {
                   disabled={loading}
                 />
               </div>
+
+              {/* Área de debug */}
+              {debugInfo && (
+                <div className="mt-4 p-2 bg-gray-100 rounded text-xs overflow-auto max-h-40">
+                  <p className="font-bold">Informações de Debug:</p>
+                  <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+                </div>
+              )}
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full" disabled={loading}>

@@ -28,7 +28,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // Função para obter um cliente com a chave de serviço (para operações privilegiadas)
 export const getServiceClient = () => {
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseServiceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtdHhpaHRidnNmc3p5d3J6Z2VoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NDAzNjg2OSwiZXhwIjoyMDU5NjEyODY5fQ.otLXiXabRqKce5INokAAiaPmOdD_b_0CmUpU-PcYaKI"
 
   if (!supabaseServiceKey) {
     console.error("SUPABASE_SERVICE_ROLE_KEY não está definido")
