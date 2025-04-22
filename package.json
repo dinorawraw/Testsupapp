@@ -60,9 +60,10 @@
     "zod": "^3.24.1",
     "@supabase/supabase-js": "latest",
     "stripe": "latest",
-    "@supabase/auth-helpers-nextjs": "latest",
     "@stripe/stripe-js": "latest",
-    "@supabase/ssr": "latest"
+    "@supabase/auth-helpers-nextjs": "latest",
+    "@supabase/ssr": "latest",
+    "firebase": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
