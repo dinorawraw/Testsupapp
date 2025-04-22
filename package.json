@@ -62,8 +62,8 @@
     "stripe": "latest",
     "@stripe/stripe-js": "latest",
     "@supabase/auth-helpers-nextjs": "latest",
-    "@supabase/ssr": "latest",
-    "firebase": "latest"
+    "firebase": "latest",
+    "@supabase/ssr": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
