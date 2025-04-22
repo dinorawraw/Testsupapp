@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClientComponentClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,7 +20,6 @@ export function AuthForm() {
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("login")
   const router = useRouter()
-  const supabase = createClientComponentClient()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,7 +34,7 @@ export function AuthForm() {
       })
 
       if (error) {
-        console.error("Erro de login:", error)
+        console.error("Erro de login:", error.message)
         throw error
       }
 
