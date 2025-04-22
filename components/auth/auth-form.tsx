@@ -28,17 +28,23 @@ export function AuthForm() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log("Tentando fazer login com:", email)
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) throw error
+      if (error) {
+        console.error("Erro de login:", error)
+        throw error
+      }
 
+      console.log("Login bem-sucedido:", data)
       router.push("/dashboard")
       router.refresh()
     } catch (error: any) {
-      setError(error.message || "Erro ao fazer login")
+      console.error("Erro completo:", error)
+      setError(error.message || "Erro ao fazer login. Verifique suas credenciais.")
     } finally {
       setLoading(false)
     }
@@ -50,7 +56,8 @@ export function AuthForm() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signUp({
+      console.log("Tentando criar conta com:", email)
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -60,12 +67,25 @@ export function AuthForm() {
         },
       })
 
-      if (error) throw error
+      if (error) {
+        console.error("Erro de cadastro:", error)
+        throw error
+      }
 
-      setActiveTab("login")
-      alert("Verifique seu email para confirmar o cadastro!")
+      console.log("Cadastro bem-sucedido:", data)
+
+      if (data.session) {
+        // Se o usuário foi criado e já está autenticado
+        router.push("/dashboard")
+        router.refresh()
+      } else {
+        // Se o usuário precisa confirmar o email
+        setActiveTab("login")
+        alert("Verifique seu email para confirmar o cadastro!")
+      }
     } catch (error: any) {
-      setError(error.message || "Erro ao criar conta")
+      console.error("Erro completo:", error)
+      setError(error.message || "Erro ao criar conta. Tente novamente.")
     } finally {
       setLoading(false)
     }
