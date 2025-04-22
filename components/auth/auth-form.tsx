@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
@@ -21,28 +21,64 @@ export function AuthForm() {
   const [activeTab, setActiveTab] = useState("login")
   const router = useRouter()
 
+  // Verificar se já existe uma sessão ativa
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (data.session) {
+        console.log("Sessão ativa encontrada:", data.session)
+      }
+    }
+
+    checkSession()
+  }, [])
+
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault() // Garantir que o formulário não seja enviado normalmente
+
+    if (loading) return // Evitar múltiplos envios
+
+    // Validação básica
+    if (!email || !password) {
+      setError("Email e senha são obrigatórios")
+      return
+    }
+
     setLoading(true)
     setError(null)
 
     try {
       console.log("Tentando fazer login com:", email)
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
+      console.log("Resposta do login:", { data, error })
+
       if (error) {
-        console.error("Erro de login:", error.message)
         throw error
       }
 
-      console.log("Login bem-sucedido:", data)
-      router.push("/dashboard")
-      router.refresh()
+      if (!data.session) {
+        throw new Error("Falha na autenticação. Nenhuma sessão retornada.")
+      }
+
+      console.log("Login bem-sucedido:", data.session)
+
+      // Verificar se o usuário está realmente autenticado antes de redirecionar
+      const { data: sessionData } = await supabase.auth.getSession()
+
+      if (sessionData.session) {
+        console.log("Sessão verificada, redirecionando...")
+        router.push("/dashboard")
+        router.refresh()
+      } else {
+        throw new Error("Falha ao iniciar sessão. Tente novamente.")
+      }
     } catch (error: any) {
-      console.error("Erro completo:", error)
+      console.error("Erro de login:", error)
       setError(error.message || "Erro ao fazer login. Verifique suas credenciais.")
     } finally {
       setLoading(false)
@@ -51,11 +87,21 @@ export function AuthForm() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (loading) return
+
+    // Validação básica
+    if (!email || !password || !fullName) {
+      setError("Todos os campos são obrigatórios")
+      return
+    }
+
     setLoading(true)
     setError(null)
 
     try {
       console.log("Tentando criar conta com:", email)
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -66,24 +112,23 @@ export function AuthForm() {
         },
       })
 
+      console.log("Resposta do cadastro:", { data, error })
+
       if (error) {
-        console.error("Erro de cadastro:", error)
         throw error
       }
 
-      console.log("Cadastro bem-sucedido:", data)
-
       if (data.session) {
         // Se o usuário foi criado e já está autenticado
+        console.log("Cadastro com autenticação imediata, redirecionando...")
         router.push("/dashboard")
         router.refresh()
       } else {
         // Se o usuário precisa confirmar o email
-        setActiveTab("login")
         alert("Verifique seu email para confirmar o cadastro!")
       }
     } catch (error: any) {
-      console.error("Erro completo:", error)
+      console.error("Erro de cadastro:", error)
       setError(error.message || "Erro ao criar conta. Tente novamente.")
     } finally {
       setLoading(false)
@@ -114,9 +159,17 @@ export function AuthForm() {
     }
   }
 
+  const handleTabChange = (value: string) => {
+    setEmail("")
+    setPassword("")
+    setFullName("")
+    setError(null)
+    setActiveTab(value)
+  }
+
   return (
     <Card className="w-full max-w-md mx-auto">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="login">Login</TabsTrigger>
           <TabsTrigger value="register">Cadastro</TabsTrigger>
@@ -143,12 +196,19 @@ export function AuthForm() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  disabled={loading}
                 />
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Senha</Label>
-                  <Button variant="link" className="p-0 h-auto text-sm" type="button" onClick={handleForgotPassword}>
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-sm"
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={loading}
+                  >
                     Esqueceu a senha?
                   </Button>
                 </div>
@@ -158,6 +218,7 @@ export function AuthForm() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  disabled={loading}
                 />
               </div>
             </CardContent>
@@ -190,6 +251,7 @@ export function AuthForm() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
+                  disabled={loading}
                 />
               </div>
               <div className="space-y-2">
@@ -201,6 +263,7 @@ export function AuthForm() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  disabled={loading}
                 />
               </div>
               <div className="space-y-2">
@@ -211,6 +274,7 @@ export function AuthForm() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  disabled={loading}
                 />
               </div>
             </CardContent>
