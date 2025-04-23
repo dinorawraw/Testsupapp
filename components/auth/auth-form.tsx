@@ -22,6 +22,7 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storageKey: "supabase.auth.token",
   },
 })
 
@@ -35,28 +36,18 @@ export function AuthForm() {
   const [debugInfo, setDebugInfo] = useState<any>(null)
   const router = useRouter()
 
-  // Verificar conexão com Supabase ao carregar o componente
+  // Verificar se já existe uma sessão ativa ao carregar o componente
   useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        // Teste simples para verificar se o Supabase está respondendo
-        const { data, error } = await supabase.from("profiles").select("count").limit(1)
-
-        if (error) {
-          console.error("Erro ao conectar com Supabase:", error)
-          setDebugInfo({ type: "connection_error", error })
-        } else {
-          console.log("Conexão com Supabase estabelecida com sucesso")
-          setDebugInfo({ type: "connection_success", data })
-        }
-      } catch (err) {
-        console.error("Exceção ao conectar com Supabase:", err)
-        setDebugInfo({ type: "connection_exception", error: err })
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (data.session) {
+        console.log("Sessão ativa encontrada, redirecionando para dashboard...")
+        router.push("/dashboard")
       }
     }
 
-    checkConnection()
-  }, [])
+    checkSession()
+  }, [router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -77,25 +68,23 @@ export function AuthForm() {
       console.log("Tentando fazer login com:", email)
 
       // Usar try-catch para capturar qualquer erro durante a autenticação
-      let authResponse
-      try {
-        authResponse = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-      } catch (authError) {
-        console.error("Exceção durante signInWithPassword:", authError)
-        setDebugInfo({ type: "auth_exception", error: authError })
-        throw new Error(`Erro de autenticação: ${authError instanceof Error ? authError.message : "Erro desconhecido"}`)
-      }
-
-      const { data, error } = authResponse
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
       console.log("Resposta completa do login:", { data, error })
       setDebugInfo({ type: "auth_response", data, error })
 
       if (error) {
-        throw new Error(error.message || "Erro de autenticação")
+        // Tratamento específico para diferentes tipos de erro
+        if (error.message.includes("Invalid login credentials")) {
+          throw new Error("Email ou senha incorretos. Verifique suas credenciais.")
+        } else if (error.message.includes("Email not confirmed")) {
+          throw new Error("Email não confirmado. Verifique sua caixa de entrada.")
+        } else {
+          throw new Error(error.message || "Erro de autenticação")
+        }
       }
 
       if (!data?.session) {
@@ -103,11 +92,14 @@ export function AuthForm() {
       }
 
       console.log("Login bem-sucedido, redirecionando...")
-      router.push("/dashboard")
-      router.refresh()
+
+      // Usar window.location para garantir um redirecionamento completo
+      window.location.href = "/dashboard"
     } catch (error: any) {
       console.error("Erro durante o processo de login:", error)
       setError(error.message || "Erro ao fazer login. Tente novamente.")
+      // Manter na aba de login quando houver erro
+      setActiveTab("login")
     } finally {
       setLoading(false)
     }
@@ -145,13 +137,18 @@ export function AuthForm() {
       setDebugInfo({ type: "signup_response", data, error })
 
       if (error) {
-        throw new Error(error.message || "Erro ao criar conta")
+        // Tratamento específico para diferentes tipos de erro
+        if (error.message.includes("already registered")) {
+          throw new Error("Este email já está registrado. Tente fazer login.")
+        } else {
+          throw new Error(error.message || "Erro ao criar conta")
+        }
       }
 
       if (data.session) {
         console.log("Cadastro com autenticação imediata, redirecionando...")
-        router.push("/dashboard")
-        router.refresh()
+        // Usar window.location para garantir um redirecionamento completo
+        window.location.href = "/dashboard"
       } else {
         alert("Verifique seu email para confirmar o cadastro!")
       }
