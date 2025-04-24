@@ -18,40 +18,39 @@ const createServerClient = () => {
   })
 }
 
-export async function saveTikTokCalculation(formData: FormData) {
+export async function saveInstagramCalculation(formData: FormData) {
   try {
     // Obter dados do formulário
-    const name = formData.get("name") as string
+    const name = (formData.get("name") as string) || "Instagram Calculation"
     const followers = Number.parseInt(formData.get("followers") as string)
-    const views = Number.parseInt(formData.get("views") as string)
-    const likes = Number.parseInt(formData.get("likes") as string)
-    const comments = Number.parseInt(formData.get("comments") as string)
+    const scope = formData.get("scope") as string
+    const minReach = Number.parseInt(formData.get("minReach") as string)
+    const maxReach = Number.parseInt(formData.get("maxReach") as string)
+    const engagement = Number.parseInt(formData.get("engagement") as string)
+    const licenseDays = Number.parseInt(formData.get("licenseDays") as string)
     const hasDiscount = formData.get("hasDiscount") === "yes"
 
     // Calcular valores base
-    const baseValue = followers * 0.004
-    const viewsValue = views * 0.004
-    const likesValue = likes * 0.008
-    const commentsValue = comments * 0.08
+    const ratePerFollower = scope === "small" ? 0.014 : 0.008
+    const baseValue = followers * ratePerFollower
 
-    // Calcular taxa de engajamento
-    const engagementRate = views > 0 ? ((likes + comments) / views) * 100 : 0
+    // Calcular min reach value
+    const minReachValue = (followers * (minReach / 100) * 8) / 1000
 
-    // Calcular valor total com ajustes
-    const calculatedValue = baseValue + viewsValue + likesValue + commentsValue
-    const threshold = 10000
-    const highValueFactor = 0.4
-    const lowValueFactor = 0.24
+    // Calcular max reach value
+    const maxReachValue = (followers * (maxReach / 100) * 10) / 1000
 
-    const engagementPenalty = engagementRate < 5 ? 0.7 : 1
+    // Calcular license value
+    const baseRate = 13.32
+    const followersInUnits = followers / 50000
+    const licenseValue = baseRate * followersInUnits * licenseDays
 
-    let adjustedValue =
-      calculatedValue > threshold ? calculatedValue * highValueFactor : calculatedValue * lowValueFactor
-
-    adjustedValue = adjustedValue * engagementPenalty
+    // Calcular valor total
+    const totalValue = baseValue + minReachValue + maxReachValue + licenseValue
 
     // Aplicar desconto se necessário
-    const estimatedValue = hasDiscount ? adjustedValue * 0.9 : adjustedValue
+    const estimatedValue = hasDiscount ? totalValue * 0.9 : totalValue
+    const reelsValue = hasDiscount ? totalValue * 2 * 0.9 : totalValue * 2
 
     // Obter usuário atual
     const supabase = createServerClient()
@@ -65,45 +64,44 @@ export async function saveTikTokCalculation(formData: FormData) {
 
     // Salvar cálculo na tabela original
     await saveCalculation(user.id, {
-      platform: "tiktok",
+      platform: "instagram",
       name,
       followers,
-      views,
-      likes,
-      comments,
+      engagement,
       has_discount: hasDiscount,
-      engagement: engagementRate,
       estimated_value: estimatedValue,
     })
 
     // Salvar cálculo na nova tabela com estrutura flexível
     await saveCalculationToNewTable(
       user.id,
-      "tiktok",
+      "instagram",
       name,
       {
         followers,
-        views,
-        likes,
-        comments,
+        scope,
+        minReach,
+        maxReach,
+        engagement,
+        licenseDays,
         hasDiscount,
-        engagement: engagementRate,
+        reelsValue,
       },
       estimatedValue,
     )
 
     // Revalidar o caminho para atualizar a UI
-    revalidatePath("/calculators/tiktok")
+    revalidatePath("/calculators/instagram")
     revalidatePath("/dashboard")
 
-    return { success: true, data: { estimated_value: estimatedValue } }
+    return { success: true, data: { estimated_value: estimatedValue, reelsValue } }
   } catch (error) {
-    console.error("Erro ao salvar cálculo do TikTok:", error)
+    console.error("Erro ao salvar cálculo do Instagram:", error)
     return { success: false, error: "Erro ao processar o cálculo" }
   }
 }
 
-export async function getTikTokCalculationHistory(userId: string) {
+export async function getInstagramCalculationHistory(userId: string) {
   try {
     const supabase = createServerClient()
 
@@ -111,22 +109,22 @@ export async function getTikTokCalculationHistory(userId: string) {
       .from("calculations")
       .select("*")
       .eq("user_id", userId)
-      .eq("platform", "tiktok")
+      .eq("platform", "instagram")
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Erro ao buscar histórico de cálculos do TikTok:", error)
+      console.error("Erro ao buscar histórico de cálculos do Instagram:", error)
       return { success: false, error: "Erro ao buscar histórico de cálculos" }
     }
 
     return { success: true, data }
   } catch (error) {
-    console.error("Erro ao buscar histórico de cálculos do TikTok:", error)
+    console.error("Erro ao buscar histórico de cálculos do Instagram:", error)
     return { success: false, error: "Erro ao buscar histórico de cálculos" }
   }
 }
 
-export async function getTikTokSavedCalculations(userId: string) {
+export async function getInstagramSavedCalculations(userId: string) {
   try {
     const supabase = createServerClient()
 
@@ -134,17 +132,17 @@ export async function getTikTokSavedCalculations(userId: string) {
       .from("saved_calculations")
       .select("*")
       .eq("user_id", userId)
-      .eq("platform", "tiktok")
+      .eq("platform", "instagram")
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Erro ao buscar cálculos salvos do TikTok:", error)
+      console.error("Erro ao buscar cálculos salvos do Instagram:", error)
       return { success: false, error: "Erro ao buscar cálculos salvos" }
     }
 
     return { success: true, data }
   } catch (error) {
-    console.error("Erro ao buscar cálculos salvos do TikTok:", error)
+    console.error("Erro ao buscar cálculos salvos do Instagram:", error)
     return { success: false, error: "Erro ao buscar cálculos salvos" }
   }
 }

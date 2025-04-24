@@ -33,16 +33,20 @@ export function AuthForm() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("login")
-  const [debugInfo, setDebugInfo] = useState<any>(null)
   const router = useRouter()
 
   // Verificar se já existe uma sessão ativa ao carregar o componente
   useEffect(() => {
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        console.log("Sessão ativa encontrada, redirecionando para dashboard...")
-        router.push("/dashboard")
+      try {
+        const { data } = await supabase.auth.getSession()
+        if (data.session) {
+          console.log("Sessão ativa encontrada, redirecionando para dashboard...")
+          // Usar router.push em vez de window.location
+          router.push("/dashboard")
+        }
+      } catch (error) {
+        console.error("Erro ao verificar sessão:", error)
       }
     }
 
@@ -62,7 +66,6 @@ export function AuthForm() {
 
     setLoading(true)
     setError(null)
-    setDebugInfo(null)
 
     try {
       console.log("Tentando fazer login com:", email)
@@ -74,7 +77,6 @@ export function AuthForm() {
       })
 
       console.log("Resposta completa do login:", { data, error })
-      setDebugInfo({ type: "auth_response", data, error })
 
       if (error) {
         // Tratamento específico para diferentes tipos de erro
@@ -93,8 +95,13 @@ export function AuthForm() {
 
       console.log("Login bem-sucedido, redirecionando...")
 
-      // Usar window.location para garantir um redirecionamento completo
-      window.location.href = "/dashboard"
+      // Modificar o redirecionamento para evitar loops
+      // Verificar se há um parâmetro redirectTo na URL
+      const params = new URLSearchParams(window.location.search)
+      const redirectTo = params.get("redirectTo") || "/dashboard"
+
+      // Usar router.push em vez de window.location para navegação no lado do cliente
+      router.push(redirectTo)
     } catch (error: any) {
       console.error("Erro durante o processo de login:", error)
       setError(error.message || "Erro ao fazer login. Tente novamente.")
@@ -118,7 +125,6 @@ export function AuthForm() {
 
     setLoading(true)
     setError(null)
-    setDebugInfo(null)
 
     try {
       console.log("Tentando criar conta com:", email)
@@ -134,7 +140,6 @@ export function AuthForm() {
       })
 
       console.log("Resposta completa do cadastro:", { data, error })
-      setDebugInfo({ type: "signup_response", data, error })
 
       if (error) {
         // Tratamento específico para diferentes tipos de erro
@@ -189,32 +194,7 @@ export function AuthForm() {
     setPassword("")
     setFullName("")
     setError(null)
-    setDebugInfo(null)
     setActiveTab(value)
-  }
-
-  // Função para testar a conexão com o Supabase
-  const testConnection = async () => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      // Teste de conexão básico
-      const { data, error } = await supabase.from("profiles").select("count").limit(1)
-
-      if (error) {
-        throw new Error(`Erro de conexão: ${error.message}`)
-      }
-
-      setDebugInfo({ type: "test_connection", success: true, data })
-      alert("Conexão com Supabase estabelecida com sucesso!")
-    } catch (error: any) {
-      console.error("Erro ao testar conexão:", error)
-      setError(error.message || "Erro ao testar conexão com Supabase")
-      setDebugInfo({ type: "test_connection", success: false, error })
-    } finally {
-      setLoading(false)
-    }
   }
 
   return (
@@ -271,25 +251,6 @@ export function AuthForm() {
                   disabled={loading}
                 />
               </div>
-
-              {/* Botão para testar conexão */}
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full mt-2"
-                onClick={testConnection}
-                disabled={loading}
-              >
-                Testar Conexão com Supabase
-              </Button>
-
-              {/* Área de debug */}
-              {debugInfo && (
-                <div className="mt-4 p-2 bg-gray-100 rounded text-xs overflow-auto max-h-40">
-                  <p className="font-bold">Informações de Debug:</p>
-                  <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-                </div>
-              )}
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full" disabled={loading}>
@@ -346,14 +307,6 @@ export function AuthForm() {
                   disabled={loading}
                 />
               </div>
-
-              {/* Área de debug */}
-              {debugInfo && (
-                <div className="mt-4 p-2 bg-gray-100 rounded text-xs overflow-auto max-h-40">
-                  <p className="font-bold">Informações de Debug:</p>
-                  <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-                </div>
-              )}
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full" disabled={loading}>

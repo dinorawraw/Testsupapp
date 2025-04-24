@@ -2,24 +2,53 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { saveYoutubeCalculation } from "@/app/calculators/youtube/actions"
+import { supabase } from "@/lib/supabase"
+import { saveYoutubeCalculation, getYoutubeCalculationHistory } from "@/app/calculators/youtube/actions"
+import { FormLabel } from "@/components/ui/form"
 
 export function YoutubeCalculator() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [formData, setFormData] = useState({
+    name: "", // Adicionado para salvar
     subscribers: "",
     views: "",
     engagement: "",
     contentType: "entertainment",
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [saveName, setSaveName] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [history, setHistory] = useState<any[]>([])
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getUser()
+      if (data.user) {
+        setUserId(data.user.id)
+        loadHistory(data.user.id)
+      }
+    }
+
+    checkUser()
+  }, [])
+
+  const loadHistory = async (uid: string) => {
+    const result = await getYoutubeCalculationHistory(uid)
+    if (result.success && result.data) {
+      setHistory(result.data)
+    }
+  }
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -73,14 +102,53 @@ export function YoutubeCalculator() {
     setResult(null)
 
     try {
-      const formDataObj = new FormData()
-      formDataObj.append("subscribers", formData.subscribers)
-      formDataObj.append("views", formData.views)
-      formDataObj.append("engagement", formData.engagement)
-      formDataObj.append("contentType", formData.contentType)
+      // Calcular valor estimado
+      const subscribers = Number.parseInt(formData.subscribers)
+      const views = Number.parseInt(formData.views)
+      const engagement = Number.parseFloat(formData.engagement)
+      const contentType = formData.contentType
 
-      const response = await saveYoutubeCalculation(formDataObj)
-      setResult(response)
+      // Base value calculation
+      const baseValue = subscribers * 0.05 + views * 0.01
+
+      // Engagement multiplier (higher engagement = higher value)
+      const engagementMultiplier = 1 + engagement / 100
+
+      // Content type multiplier
+      let contentMultiplier = 1.0
+      switch (contentType) {
+        case "education":
+          contentMultiplier = 1.3 // Educational content often has higher value
+          break
+        case "entertainment":
+          contentMultiplier = 1.2 // Entertainment is valuable but varies
+          break
+        case "gaming":
+          contentMultiplier = 1.1 // Gaming has specific audience
+          break
+        case "lifestyle":
+          contentMultiplier = 1.15 // Lifestyle often has good brand fit
+          break
+        default:
+          contentMultiplier = 1.0
+      }
+
+      // Calculate final value
+      const estimatedValue = baseValue * engagementMultiplier * contentMultiplier
+
+      // Round to 2 decimal places
+      const roundedValue = Math.round(estimatedValue * 100) / 100
+
+      setResult({
+        success: true,
+        data: {
+          estimated_value: roundedValue,
+          subscribers,
+          views,
+          engagement,
+          contentType,
+        },
+      })
     } catch (error) {
       console.error("Erro:", error)
       setResult({ success: false, error: "Ocorreu um erro ao processar o cálculo" })
@@ -91,6 +159,7 @@ export function YoutubeCalculator() {
 
   const resetForm = () => {
     setFormData({
+      name: "",
       subscribers: "",
       views: "",
       engagement: "",
@@ -98,6 +167,78 @@ export function YoutubeCalculator() {
     })
     setResult(null)
     setErrors({})
+  }
+
+  const showSavePrompt = () => {
+    setShowSaveDialog(true)
+    setSaveName("")
+  }
+
+  const cancelSave = () => {
+    setShowSaveDialog(false)
+    setSaveName("")
+  }
+
+  const saveCalculation = async () => {
+    if (!saveName.trim()) {
+      alert("Por favor, digite um nome para este cálculo")
+      return
+    }
+
+    if (!userId || !result) {
+      alert("Você precisa estar logado para salvar cálculos")
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const formDataObj = new FormData()
+      formDataObj.append("name", saveName)
+      formDataObj.append("subscribers", formData.subscribers)
+      formDataObj.append("views", formData.views)
+      formDataObj.append("engagement", formData.engagement)
+      formDataObj.append("contentType", formData.contentType)
+
+      const response = await saveYoutubeCalculation(formDataObj)
+
+      if (response.success) {
+        setShowSaveDialog(false)
+        setLastSavedAt(new Date().toLocaleTimeString())
+        alert("Cálculo salvo com sucesso!")
+
+        // Reload history
+        if (userId) {
+          loadHistory(userId)
+        }
+      } else {
+        throw new Error(response.error || "Erro ao salvar cálculo")
+      }
+    } catch (error) {
+      console.error("Erro ao salvar cálculo:", error)
+      alert("Não foi possível salvar o cálculo")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggleHistory = () => {
+    setShowHistory(!showHistory)
+    if (!showHistory && userId) {
+      loadHistory(userId)
+    }
+  }
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value)
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR")
   }
 
   return (
@@ -199,10 +340,7 @@ export function YoutubeCalculator() {
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Cálculo Concluído!</h3>
               <div className="text-3xl font-bold text-green-700 mb-4">
-                {new Intl.NumberFormat("pt-BR", {
-                  style: "currency",
-                  currency: "BRL",
-                }).format(result.data.estimated_value)}
+                {formatCurrency(result.data.estimated_value)}
               </div>
               <p className="text-gray-600">
                 Este é o valor estimado do seu canal do YouTube com base nas métricas fornecidas.
@@ -231,6 +369,16 @@ export function YoutubeCalculator() {
               </div>
             </div>
 
+            <div className="flex items-center justify-between gap-4">
+              <Button onClick={showSavePrompt} disabled={loading}>
+                {loading ? "Salvando..." : "Salvar Cálculo"}
+              </Button>
+              <Button onClick={toggleHistory} variant="outline">
+                Ver Histórico
+              </Button>
+              {lastSavedAt && <span className="text-sm text-gray-500">Último salvamento: {lastSavedAt}</span>}
+            </div>
+
             <Button onClick={resetForm} className="w-full">
               Fazer Novo Cálculo
             </Button>
@@ -243,6 +391,76 @@ export function YoutubeCalculator() {
           </div>
         )}
       </CardContent>
+
+      {/* Save Dialog */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <Card className="max-w-md w-full">
+            <CardHeader>
+              <CardTitle>Salvar Cálculo</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <FormLabel>Nome do Cálculo</FormLabel>
+                <Input
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  placeholder="Digite um nome para identificar este cálculo"
+                />
+              </div>
+            </CardContent>
+            <CardContent className="flex justify-end gap-3">
+              <Button variant="outline" onClick={cancelSave}>
+                Cancelar
+              </Button>
+              <Button onClick={saveCalculation} disabled={loading}>
+                {loading ? "Salvando..." : "Salvar"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* History Dialog */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <Card className="max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <CardHeader className="relative">
+              <Button variant="ghost" size="icon" className="absolute right-4 top-4" onClick={toggleHistory}>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </Button>
+              <CardTitle>Histórico de Cálculos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {history.length > 0 ? (
+                <div className="space-y-4">
+                  {history.map((item: any) => (
+                    <Card key={item.id} className="bg-gray-50">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg">{item.name || "YouTube Calculation"}</CardTitle>
+                        <CardDescription>{formatDate(item.created_at)}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>Inscritos: {item.subscribers?.toLocaleString() || "N/A"}</div>
+                          <div>Visualizações: {item.views?.toLocaleString() || "N/A"}</div>
+                          <div>Engajamento: {item.engagement}%</div>
+                          <div>Tipo: {item.content_type || "N/A"}</div>
+                          <div className="col-span-2 font-bold mt-2">Valor: {formatCurrency(item.estimated_value)}</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">Nenhum cálculo salvo ainda</div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </Card>
   )
 }

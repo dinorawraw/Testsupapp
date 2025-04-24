@@ -11,23 +11,25 @@ import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { saveTikTokCalculation, getTikTokCalculationHistory } from "@/app/calculators/tiktok/actions"
-
-// Importar o cliente Supabase do nosso arquivo personalizado
+import { saveInstagramCalculation, getInstagramCalculationHistory } from "@/app/calculators/instagram/actions"
 import { supabase } from "@/lib/supabase"
 
 const formSchema = z.object({
   followers: z.string().regex(/^\d+$/, {
-    message: "Por favor, digite um número válido de seguidores.",
+    message: "Please enter a valid number of followers.",
   }),
-  views: z.string().regex(/^\d+$/, {
-    message: "Por favor, digite um número válido de visualizações.",
+  scope: z.enum(["small", "large"]),
+  minReach: z.string().regex(/^\d+$/, {
+    message: "Please enter a valid percentage.",
   }),
-  likes: z.string().regex(/^\d+$/, {
-    message: "Por favor, digite um número válido de curtidas.",
+  maxReach: z.string().regex(/^\d+$/, {
+    message: "Please enter a valid percentage.",
   }),
-  comments: z.string().regex(/^\d+$/, {
-    message: "Por favor, digite um número válido de comentários.",
+  engagement: z.string().regex(/^\d+$/, {
+    message: "Please enter a valid percentage.",
+  }),
+  licenseDays: z.string().regex(/^\d+$/, {
+    message: "Please enter a valid number of days.",
   }),
   hasDiscount: z.enum(["yes", "no"]),
 })
@@ -36,16 +38,19 @@ type CalculationHistory = {
   id: string
   name: string
   followers: number
-  views: number
-  likes: number
-  comments: number
+  scope?: string
+  minReach?: number
+  maxReach?: number
+  engagement?: number
+  licenseDays?: number
   estimated_value: number
   created_at: string
 }
 
-export function TikTokCalculator() {
+export function InstagramCalculator() {
   const { toast } = useToast()
   const [result, setResult] = useState<number | null>(null)
+  const [reelsValue, setReelsValue] = useState<number | null>(null)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState("")
   const [loading, setLoading] = useState(false)
@@ -67,7 +72,7 @@ export function TikTokCalculator() {
   }, [])
 
   const loadHistory = async (uid: string) => {
-    const result = await getTikTokCalculationHistory(uid)
+    const result = await getInstagramCalculationHistory(uid)
     if (result.success && result.data) {
       setHistory(result.data as CalculationHistory[])
     }
@@ -77,51 +82,53 @@ export function TikTokCalculator() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       followers: "",
-      views: "",
-      likes: "",
-      comments: "",
+      scope: "small",
+      minReach: "5",
+      maxReach: "50",
+      engagement: "0",
+      licenseDays: "1",
       hasDiscount: "no",
     },
   })
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     // Convert string values to numbers
-    const followers = Number.parseInt(values.followers) || 0
-    const views = Number.parseInt(values.views) || 0
-    const likes = Number.parseInt(values.likes) || 0
-    const comments = Number.parseInt(values.comments) || 0
+    const followers = Number.parseInt(values.followers)
+    const minReach = Number.parseInt(values.minReach)
+    const maxReach = Number.parseInt(values.maxReach)
+    const engagement = Number.parseInt(values.engagement)
+    const licenseDays = Number.parseInt(values.licenseDays)
+    const scope = values.scope
     const hasDiscount = values.hasDiscount
 
-    // Calculate engagement rate
-    const engagementRate = views > 0 ? (likes + comments) / views : 0
+    // Calculate base value
+    const ratePerFollower = scope === "small" ? 0.014 : 0.008
+    const baseValue = followers * ratePerFollower
 
-    // Calculate base values
-    const baseValue = followers * 0.004
-    const viewsValue = views * 0.004
-    const likesValue = likes * 0.008
-    const commentsValue = comments * 0.08
+    // Calculate min reach value
+    const minReachValue = (followers * (minReach / 100) * 8) / 1000
 
-    // Calculate total value with adjustments
-    const calculatedValue = baseValue + viewsValue + likesValue + commentsValue
-    const threshold = 10000
-    const highValueFactor = 0.4
-    const lowValueFactor = 0.24
+    // Calculate max reach value
+    const maxReachValue = (followers * (maxReach / 100) * 10) / 1000
 
-    const engagementPenalty = engagementRate < 0.05 ? 0.7 : 1
+    // Calculate license value
+    const baseRate = 13.32
+    const followersInUnits = followers / 50000
+    const licenseValue = baseRate * followersInUnits * licenseDays
 
-    let adjustedValue =
-      calculatedValue > threshold ? calculatedValue * highValueFactor : calculatedValue * lowValueFactor
-
-    adjustedValue = adjustedValue * engagementPenalty
+    // Calculate total value
+    const totalValue = baseValue + minReachValue + maxReachValue + licenseValue
 
     // Apply discount if needed
-    const finalValue = hasDiscount === "yes" ? adjustedValue * 0.9 : adjustedValue
+    const finalValue = hasDiscount === "yes" ? totalValue * 0.9 : totalValue
+    const finalReelsValue = hasDiscount === "yes" ? totalValue * 2 * 0.9 : totalValue * 2
 
     setResult(finalValue)
+    setReelsValue(finalReelsValue)
 
     toast({
-      title: "Cálculo completo",
-      description: "Seu cálculo foi processado.",
+      title: "Calculation complete",
+      description: "Your calculation has been processed.",
     })
   }
 
@@ -138,8 +145,8 @@ export function TikTokCalculator() {
   const saveCalculation = async () => {
     if (!saveName.trim()) {
       toast({
-        title: "Erro",
-        description: "Por favor, digite um nome para este cálculo",
+        title: "Error",
+        description: "Please enter a name for this calculation",
         variant: "destructive",
       })
       return
@@ -147,8 +154,8 @@ export function TikTokCalculator() {
 
     if (!userId || !result) {
       toast({
-        title: "Erro",
-        description: "Você precisa estar logado para salvar cálculos",
+        title: "Error",
+        description: "You need to be logged in to save calculations",
         variant: "destructive",
       })
       return
@@ -162,19 +169,21 @@ export function TikTokCalculator() {
       const formData = new FormData()
       formData.append("name", saveName)
       formData.append("followers", values.followers)
-      formData.append("views", values.views)
-      formData.append("likes", values.likes)
-      formData.append("comments", values.comments)
-      formData.append("hasDiscount", values.hasDiscount === "yes" ? "yes" : "no")
+      formData.append("scope", values.scope)
+      formData.append("minReach", values.minReach)
+      formData.append("maxReach", values.maxReach)
+      formData.append("engagement", values.engagement)
+      formData.append("licenseDays", values.licenseDays)
+      formData.append("hasDiscount", values.hasDiscount)
 
-      const response = await saveTikTokCalculation(formData)
+      const response = await saveInstagramCalculation(formData)
 
       if (response.success) {
         setShowSaveDialog(false)
         setLastSavedAt(new Date().toLocaleTimeString())
         toast({
-          title: "Cálculo salvo",
-          description: "Seu cálculo foi salvo com sucesso.",
+          title: "Calculation saved",
+          description: "Your calculation has been saved successfully.",
         })
 
         // Reload history
@@ -182,13 +191,13 @@ export function TikTokCalculator() {
           loadHistory(userId)
         }
       } else {
-        throw new Error(response.error || "Erro ao salvar cálculo")
+        throw new Error(response.error || "Error saving calculation")
       }
     } catch (error) {
-      console.error("Erro ao salvar cálculo:", error)
+      console.error("Error saving calculation:", error)
       toast({
-        title: "Erro",
-        description: "Não foi possível salvar o cálculo",
+        title: "Error",
+        description: "Could not save the calculation",
         variant: "destructive",
       })
     } finally {
@@ -204,10 +213,7 @@ export function TikTokCalculator() {
   }
 
   const formatCurrency = (value: number) => {
-    return value.toLocaleString("pt-BR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
+    return value.toFixed(2)
   }
 
   const formatDate = (dateString: string) => {
@@ -219,9 +225,9 @@ export function TikTokCalculator() {
     <>
       <Card className="mb-8 card-gradient">
         <CardHeader className="border-b gradient-border">
-          <CardTitle className="text-2xl text-white">Calculadora TikTok</CardTitle>
+          <CardTitle className="text-2xl text-white">Calculadora de Publis - Instagram</CardTitle>
           <CardDescription className="text-white">
-            Calcule ganhos potenciais para seu conteúdo no TikTok
+            Calculate potential earnings for your Instagram content
           </CardDescription>
         </CardHeader>
         <Form {...form}>
@@ -234,9 +240,9 @@ export function TikTokCalculator() {
                   <FormItem>
                     <FormLabel className="text-white">Número de Seguidores</FormLabel>
                     <FormControl>
-                      <Input placeholder="ex: 10000" {...field} />
+                      <Input placeholder="e.g. 10000" {...field} />
                     </FormControl>
-                    <FormDescription className="text-white">Digite seu número total de seguidores</FormDescription>
+                    <FormDescription className="text-white">Enter your total number of followers</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -244,14 +250,72 @@ export function TikTokCalculator() {
 
               <FormField
                 control={form.control}
-                name="views"
+                name="scope"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-white">Visualizações</FormLabel>
+                    <FormLabel className="text-white">Escopo</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select scope" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="small">Pequeno</SelectItem>
+                        <SelectItem value="large">Grande</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription className="text-white">
+                      Se o escopo de entrega for pequeno o valor será cobrado normal, caso seja um escopo maior é
+                      adicionado um pequeno desconto
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="minReach"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Alcance Mínimo (%)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. 5" {...field} />
+                      </FormControl>
+                      <FormDescription className="text-white">Porcentagem de alcance mínimo</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="maxReach"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Alcance Máximo (%)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. 50" {...field} />
+                      </FormControl>
+                      <FormDescription className="text-white">Porcentagem de alcance máximo</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="engagement"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-white">Taxa de Engajamento (%)</FormLabel>
                     <FormControl>
-                      <Input placeholder="ex: 50000" {...field} />
+                      <Input placeholder="e.g. 3.0" {...field} />
                     </FormControl>
-                    <FormDescription className="text-white">Inserir a média de visualizações</FormDescription>
+                    <FormDescription className="text-white">Porcentagem de engajamento no seu conteúdo</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -259,29 +323,14 @@ export function TikTokCalculator() {
 
               <FormField
                 control={form.control}
-                name="likes"
+                name="licenseDays"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-white">Curtidas</FormLabel>
+                    <FormLabel className="text-white">Dias de Licenciamento de Imagem</FormLabel>
                     <FormControl>
-                      <Input placeholder="ex: 5000" {...field} />
+                      <Input placeholder="e.g. 1" {...field} />
                     </FormControl>
-                    <FormDescription className="text-white">Inserir a média de curtidas</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="comments"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-white">Comentários</FormLabel>
-                    <FormControl>
-                      <Input placeholder="ex: 500" {...field} />
-                    </FormControl>
-                    <FormDescription className="text-white">Inserir a média de comentários</FormDescription>
+                    <FormDescription className="text-white">Quantos dias essa campanha vai rodar</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -296,7 +345,7 @@ export function TikTokCalculator() {
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma opção" />
+                          <SelectValue placeholder="Select option" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -325,7 +374,7 @@ export function TikTokCalculator() {
         <>
           <Card className="mb-4 card-gradient">
             <CardHeader className="border-b gradient-border">
-              <CardTitle className="text-white">VALOR TOTAL</CardTitle>
+              <CardTitle className="text-white">VALORES STORIES</CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
               <div className="space-y-4">
@@ -339,6 +388,31 @@ export function TikTokCalculator() {
                   <div className="flex justify-between items-center text-lg font-bold text-white">
                     <span>Valor Total{form.watch("hasDiscount") === "yes" ? " com Desconto" : ""}:</span>
                     <span>R$ {formatCurrency(result)}</span>
+                  </div>
+                  {form.watch("hasDiscount") === "yes" && (
+                    <div className="text-sm text-green-500 text-right mt-1">Desconto de 10% aplicado</div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mb-4 card-gradient">
+            <CardHeader className="border-b gradient-border">
+              <CardTitle className="text-white">VALORES REELS</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                <div className="pt-4">
+                  {form.watch("hasDiscount") === "yes" && (
+                    <div className="flex justify-between items-center text-lg mb-2 text-white">
+                      <span>Valor Original:</span>
+                      <span className="line-through">R$ {formatCurrency(reelsValue! / 0.9)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center text-lg font-bold text-white">
+                    <span>Valor Total{form.watch("hasDiscount") === "yes" ? " com Desconto" : ""}:</span>
+                    <span>R$ {formatCurrency(reelsValue!)}</span>
                   </div>
                   {form.watch("hasDiscount") === "yes" && (
                     <div className="text-sm text-green-500 text-right mt-1">Desconto de 10% aplicado</div>
@@ -411,15 +485,14 @@ export function TikTokCalculator() {
                   {history.map((item) => (
                     <Card key={item.id} className="bg-gray-800 text-white">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-lg">{item.name}</CardTitle>
+                        <CardTitle className="text-lg">{item.name || "Instagram Calculation"}</CardTitle>
                         <CardDescription className="text-gray-300">{formatDate(item.created_at)}</CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div>Seguidores: {item.followers.toLocaleString()}</div>
-                          <div>Visualizações: {item.views.toLocaleString()}</div>
-                          <div>Curtidas: {item.likes.toLocaleString()}</div>
-                          <div>Comentários: {item.comments.toLocaleString()}</div>
+                          {item.scope && <div>Escopo: {item.scope === "small" ? "Pequeno" : "Grande"}</div>}
+                          {item.engagement && <div>Engajamento: {item.engagement}%</div>}
                           <div className="col-span-2 font-bold mt-2">
                             Valor: R$ {formatCurrency(item.estimated_value)}
                           </div>

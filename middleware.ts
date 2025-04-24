@@ -19,9 +19,6 @@ export async function middleware(req: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession()
 
-  console.log("Middleware - URL:", req.nextUrl.pathname)
-  console.log("Middleware - Sessão:", session ? "Autenticado" : "Não autenticado")
-
   // Rotas protegidas que requerem autenticação
   const protectedRoutes = ["/dashboard", "/admin", "/payment"]
   const isProtectedRoute = protectedRoutes.some((route) => req.nextUrl.pathname.startsWith(route))
@@ -29,6 +26,12 @@ export async function middleware(req: NextRequest) {
   // Rotas de autenticação (login/registro)
   const authRoutes = ["/login", "/register"]
   const isAuthRoute = authRoutes.some((route) => req.nextUrl.pathname.startsWith(route))
+
+  // Adicionar log para debug
+  console.log("Middleware - URL:", req.nextUrl.pathname)
+  console.log("Middleware - Sessão existe:", !!session)
+  console.log("Middleware - É rota protegida:", isProtectedRoute)
+  console.log("Middleware - É rota de auth:", isAuthRoute)
 
   // Redirecionar usuários não autenticados para login
   if (isProtectedRoute && !session) {
@@ -47,6 +50,7 @@ export async function middleware(req: NextRequest) {
   return res
 }
 
+// Modificar o matcher para evitar loops de redirecionamento
 export const config = {
   matcher: ["/dashboard/:path*", "/admin/:path*", "/payment/:path*", "/login", "/register"],
 }
