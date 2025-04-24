@@ -1,9 +1,14 @@
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import type { Database } from "./database.types"
+import { createClient } from "@supabase/supabase-js"
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabase-config"
 
-// Cliente para componentes do lado do cliente
-export const createClient = () => {
-  return createClientComponentClient<Database>()
-}
+// Criar cliente Supabase para uso no navegador
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+})
 
-export default createClient
+// Também exportamos como default para compatibilidade
+export default supabase

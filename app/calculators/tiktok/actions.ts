@@ -1,139 +1,54 @@
 "use server"
 
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { revalidatePath } from "next/cache"
-import {
-  createUniversalClient,
-  universalSaveCalculation,
-  universalSaveCalculationToNewTable,
-} from "@/lib/supabase/universal-client"
 
 export async function saveTikTokCalculation(formData: FormData) {
   try {
-    // Obter dados do formulário
-    const name = (formData.get("name") as string) || "TikTok Calculation"
-    const followers = Number.parseInt(formData.get("followers") as string)
-    const views = Number.parseInt(formData.get("views") as string)
-    const likes = Number.parseInt(formData.get("likes") as string)
-    const comments = Number.parseInt(formData.get("comments") as string)
-    const hasDiscount = formData.get("hasDiscount") === "yes"
+    const supabase = createClientComponentClient()
 
-    // Calcular valores base
-    const baseValue = followers * 0.004
-    const viewsValue = views * 0.004
-    const likesValue = likes * 0.008
-    const commentsValue = comments * 0.08
-
-    // Calcular taxa de engajamento
-    const engagementRate = views > 0 ? ((likes + comments) / views) * 100 : 0
-
-    // Calcular valor total com ajustes
-    const calculatedValue = baseValue + viewsValue + likesValue + commentsValue
-    const threshold = 10000
-    const highValueFactor = 0.4
-    const lowValueFactor = 0.24
-
-    const engagementPenalty = engagementRate < 5 ? 0.7 : 1
-
-    let adjustedValue =
-      calculatedValue > threshold ? calculatedValue * highValueFactor : calculatedValue * lowValueFactor
-
-    adjustedValue = adjustedValue * engagementPenalty
-
-    // Aplicar desconto se necessário
-    const estimatedValue = hasDiscount ? adjustedValue * 0.9 : adjustedValue
-
-    // Obter usuário atual
-    const supabase = createUniversalClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
+    // Obter a sessão atual
+    const { data: sessionData } = await supabase.auth.getSession()
+    if (!sessionData.session) {
       return { success: false, error: "Usuário não autenticado" }
     }
 
-    // Salvar cálculo na tabela original
-    await universalSaveCalculation(user.id, {
-      platform: "tiktok",
-      name,
-      followers,
-      views,
-      likes,
-      comments,
-      has_discount: hasDiscount,
-      engagement: engagementRate,
-      estimated_value: estimatedValue,
-    })
+    const userId = sessionData.session.user.id
 
-    // Salvar cálculo na nova tabela com estrutura flexível
-    await universalSaveCalculationToNewTable(
-      user.id,
-      "tiktok",
-      name,
+    // Extrair dados do FormData
+    const followers = formData.get("followers") ? Number(formData.get("followers")) : 0
+    const engagement = formData.get("engagement") ? Number(formData.get("engagement")) : 0
+    const views = formData.get("views") ? Number(formData.get("views")) : 0
+    const valuePerPost = formData.get("valuePerPost") ? Number(formData.get("valuePerPost")) : 0
+    const valuePerVideo = formData.get("valuePerVideo") ? Number(formData.get("valuePerVideo")) : 0
+
+    // Inserir na tabela de cálculos
+    const { data, error } = await supabase.from("calculations").insert([
       {
-        followers,
-        views,
-        likes,
-        comments,
-        hasDiscount,
-        engagement: engagementRate,
+        user_id: userId,
+        platform: "tiktok",
+        data: {
+          followers,
+          engagement,
+          views,
+          valuePerPost,
+          valuePerVideo,
+        },
+        created_at: new Date().toISOString(),
       },
-      estimatedValue,
-    )
+    ])
 
-    // Revalidar o caminho para atualizar a UI
-    revalidatePath("/calculators/tiktok")
+    if (error) {
+      console.error("Erro ao salvar cálculo:", error)
+      return { success: false, error: error.message }
+    }
+
+    // Revalidar o caminho para atualizar os dados
     revalidatePath("/dashboard")
 
-    return { success: true, data: { estimated_value: estimatedValue } }
-  } catch (error) {
-    console.error("Erro ao salvar cálculo do TikTok:", error)
-    return { success: false, error: "Erro ao processar o cálculo" }
-  }
-}
-
-export async function getTikTokCalculationHistory(userId: string) {
-  try {
-    const supabase = createUniversalClient()
-
-    const { data, error } = await supabase
-      .from("calculations")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("platform", "tiktok")
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Erro ao buscar histórico de cálculos do TikTok:", error)
-      return { success: false, error: "Erro ao buscar histórico de cálculos" }
-    }
-
-    return { success: true, data }
-  } catch (error) {
-    console.error("Erro ao buscar histórico de cálculos do TikTok:", error)
-    return { success: false, error: "Erro ao buscar histórico de cálculos" }
-  }
-}
-
-export async function getTikTokSavedCalculations(userId: string) {
-  try {
-    const supabase = createUniversalClient()
-
-    const { data, error } = await supabase
-      .from("saved_calculations")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("platform", "tiktok")
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Erro ao buscar cálculos salvos do TikTok:", error)
-      return { success: false, error: "Erro ao buscar cálculos salvos" }
-    }
-
-    return { success: true, data }
-  } catch (error) {
-    console.error("Erro ao buscar cálculos salvos do TikTok:", error)
-    return { success: false, error: "Erro ao buscar cálculos salvos" }
+    return { success: true }
+  } catch (error: any) {
+    console.error("Erro ao processar solicitação:", error)
+    return { success: false, error: error.message || "Erro desconhecido" }
   }
 }

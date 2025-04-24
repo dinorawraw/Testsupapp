@@ -2,54 +2,49 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs"
 
-export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
-
+export async function middleware(request: NextRequest) {
   try {
-    // Cria um cliente Supabase específico para o middleware
-    const supabase = createMiddlewareClient({ req, res })
+    // Criar cliente Supabase para o middleware
+    const supabase = createMiddlewareClient({ req: request, res: NextResponse.next() })
 
-    // Obter a sessão atual
+    // Verificar se há uma sessão válida
     const {
       data: { session },
     } = await supabase.auth.getSession()
 
+    // URL atual e URL de destino
+    const requestUrl = new URL(request.url)
+    const redirectUrl = new URL("/login", requestUrl.origin)
+
+    // Adicionar parâmetro redirectTo para retornar após o login
+    redirectUrl.searchParams.set("redirectTo", requestUrl.pathname)
+
     // Rotas protegidas que requerem autenticação
-    const protectedRoutes = ["/dashboard", "/admin", "/payment", "/calculators"]
-    const isProtectedRoute = protectedRoutes.some((route) => req.nextUrl.pathname.startsWith(route))
+    const protectedRoutes = ["/dashboard", "/calculators", "/admin"]
 
-    // Rotas de autenticação (login/registro)
-    const authRoutes = ["/login", "/register"]
-    const isAuthRoute = authRoutes.some((route) => req.nextUrl.pathname === route)
+    // Verificar se a rota atual é protegida
+    const isProtectedRoute = protectedRoutes.some((route) => requestUrl.pathname.startsWith(route))
 
-    // Adicionar log para debug
-    console.log("Middleware - URL:", req.nextUrl.pathname)
-    console.log("Middleware - Sessão existe:", !!session)
-    console.log("Middleware - É rota protegida:", isProtectedRoute)
-    console.log("Middleware - É rota de auth:", isAuthRoute)
-
-    // Redirecionar usuários não autenticados para login
+    // Se for uma rota protegida e não houver sessão, redirecionar para o login
     if (isProtectedRoute && !session) {
-      console.log("Middleware - Redirecionando para login (rota protegida)")
-      const redirectUrl = new URL("/login", req.url)
-      redirectUrl.searchParams.set("redirectTo", req.nextUrl.pathname)
       return NextResponse.redirect(redirectUrl)
     }
 
-    // Redirecionar usuários autenticados para dashboard se tentarem acessar login/registro
-    if (isAuthRoute && session) {
-      console.log("Middleware - Redirecionando para dashboard (usuário já autenticado)")
-      return NextResponse.redirect(new URL("/dashboard", req.url))
+    // Se for a rota de login e houver sessão, redirecionar para o dashboard
+    if (requestUrl.pathname === "/login" && session) {
+      return NextResponse.redirect(new URL("/dashboard", requestUrl.origin))
     }
 
-    return res
+    // Continuar com a requisição normalmente
+    return NextResponse.next()
   } catch (error) {
     console.error("Erro no middleware:", error)
-    return res
+    // Em caso de erro, permitir que a requisição continue
+    return NextResponse.next()
   }
 }
 
-// Modificar o matcher para evitar loops de redirecionamento
+// Configurar quais rotas o middleware deve ser executado
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/payment/:path*", "/calculators/:path*", "/login", "/register"],
+  matcher: ["/dashboard/:path*", "/calculators/:path*", "/admin/:path*", "/login"],
 }

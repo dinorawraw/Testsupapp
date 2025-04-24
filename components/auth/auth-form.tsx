@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useAuth } from "./auth-provider"
 
 export function AuthForm() {
   const [email, setEmail] = useState("")
@@ -20,21 +19,53 @@ export function AuthForm() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("login")
+  const [user, setUser] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  // Usar o cliente Supabase do contexto de autenticação
+  // Criar cliente Supabase
   const supabase = createClientComponentClient()
-  const { user, isLoading } = useAuth()
 
   // Verificar se já existe uma sessão ativa ao carregar o componente
   useEffect(() => {
-    if (user && !isLoading) {
-      console.log("Usuário já autenticado:", user.email)
-      const params = new URLSearchParams(window.location.search)
-      const redirectTo = params.get("redirectTo") || "/dashboard"
-      router.push(redirectTo)
+    const checkSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession()
+        if (data.session) {
+          setUser(data.session.user)
+          console.log("Sessão ativa encontrada, redirecionando para dashboard...")
+          // Verificar se há um parâmetro redirectTo na URL
+          const params = new URLSearchParams(window.location.search)
+          const redirectTo = params.get("redirectTo") || "/dashboard"
+          router.push(redirectTo)
+        }
+      } catch (error) {
+        console.error("Erro ao verificar sessão:", error)
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }, [user, isLoading, router])
+
+    checkSession()
+
+    // Configurar listener para mudanças de estado de autenticação
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      console.log("Auth state changed:", _event, newSession?.user?.email)
+      setUser(newSession?.user ?? null)
+
+      // Atualizar a UI quando o estado de autenticação mudar
+      if (newSession) {
+        router.refresh()
+      }
+    })
+
+    // Limpar subscription ao desmontar
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()

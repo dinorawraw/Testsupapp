@@ -1,151 +1,54 @@
 "use server"
 
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { revalidatePath } from "next/cache"
-import {
-  createUniversalClient,
-  universalSaveCalculation,
-  universalSaveCalculationToNewTable,
-} from "@/lib/supabase/universal-client"
-
-// Função para calcular o valor estimado do canal do YouTube
-function calculateYoutubeValue(subscribers: number, views: number, engagement: number, contentType: string): number {
-  // Base value calculation
-  const baseValue = subscribers * 0.05 + views * 0.01
-
-  // Engagement multiplier (higher engagement = higher value)
-  const engagementMultiplier = 1 + engagement / 100
-
-  // Content type multiplier
-  let contentMultiplier = 1.0
-  switch (contentType) {
-    case "education":
-      contentMultiplier = 1.3 // Educational content often has higher value
-      break
-    case "entertainment":
-      contentMultiplier = 1.2 // Entertainment is valuable but varies
-      break
-    case "gaming":
-      contentMultiplier = 1.1 // Gaming has specific audience
-      break
-    case "lifestyle":
-      contentMultiplier = 1.15 // Lifestyle often has good brand fit
-      break
-    default:
-      contentMultiplier = 1.0
-  }
-
-  // Calculate final value
-  const estimatedValue = baseValue * engagementMultiplier * contentMultiplier
-
-  // Round to 2 decimal places
-  return Math.round(estimatedValue * 100) / 100
-}
 
 export async function saveYoutubeCalculation(formData: FormData) {
   try {
-    // Obter dados do formulário
-    const name = (formData.get("name") as string) || `YouTube Calculation - ${new Date().toLocaleDateString()}`
-    const subscribers = Number.parseInt(formData.get("subscribers") as string)
-    const views = Number.parseInt(formData.get("views") as string)
-    const engagement = Number.parseFloat(formData.get("engagement") as string)
-    const contentType = formData.get("contentType") as string
+    const supabase = createClientComponentClient()
 
-    // Validar entrada
-    if (isNaN(subscribers) || isNaN(views) || isNaN(engagement)) {
-      return { success: false, error: "Dados inválidos" }
-    }
-
-    // Calcular valor estimado
-    const estimatedValue = calculateYoutubeValue(subscribers, views, engagement, contentType)
-
-    // Obter usuário atual
-    const supabase = createUniversalClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
+    // Obter a sessão atual
+    const { data: sessionData } = await supabase.auth.getSession()
+    if (!sessionData.session) {
       return { success: false, error: "Usuário não autenticado" }
     }
 
-    // Salvar cálculo na tabela original
-    await universalSaveCalculation(user.id, {
-      platform: "youtube",
-      name,
-      subscribers,
-      views,
-      engagement,
-      content_type: contentType,
-      estimated_value: estimatedValue,
-    })
+    const userId = sessionData.session.user.id
 
-    // Salvar cálculo na nova tabela com estrutura flexível
-    await universalSaveCalculationToNewTable(
-      user.id,
-      "youtube",
-      name,
+    // Extrair dados do FormData
+    const subscribers = formData.get("subscribers") ? Number(formData.get("subscribers")) : 0
+    const views = formData.get("views") ? Number(formData.get("views")) : 0
+    const engagement = formData.get("engagement") ? Number(formData.get("engagement")) : 0
+    const valuePerVideo = formData.get("valuePerVideo") ? Number(formData.get("valuePerVideo")) : 0
+    const valuePerShort = formData.get("valuePerShort") ? Number(formData.get("valuePerShort")) : 0
+
+    // Inserir na tabela de cálculos
+    const { data, error } = await supabase.from("calculations").insert([
       {
-        subscribers,
-        views,
-        engagement,
-        contentType,
+        user_id: userId,
+        platform: "youtube",
+        data: {
+          subscribers,
+          views,
+          engagement,
+          valuePerVideo,
+          valuePerShort,
+        },
+        created_at: new Date().toISOString(),
       },
-      estimatedValue,
-    )
+    ])
 
-    // Revalidar o caminho para atualizar a UI
-    revalidatePath("/calculators/youtube")
+    if (error) {
+      console.error("Erro ao salvar cálculo:", error)
+      return { success: false, error: error.message }
+    }
+
+    // Revalidar o caminho para atualizar os dados
     revalidatePath("/dashboard")
 
-    return { success: true, data: { estimated_value: estimatedValue } }
-  } catch (error) {
-    console.error("Erro ao salvar cálculo do YouTube:", error)
-    return { success: false, error: "Erro ao processar o cálculo" }
-  }
-}
-
-export async function getYoutubeCalculationHistory(userId: string) {
-  try {
-    const supabase = createUniversalClient()
-
-    const { data, error } = await supabase
-      .from("calculations")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("platform", "youtube")
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Erro ao buscar histórico de cálculos do YouTube:", error)
-      return { success: false, error: "Erro ao buscar histórico de cálculos" }
-    }
-
-    return { success: true, data }
-  } catch (error) {
-    console.error("Erro ao buscar histórico de cálculos do YouTube:", error)
-    return { success: false, error: "Erro ao buscar histórico de cálculos" }
-  }
-}
-
-export async function getYoutubeSavedCalculations(userId: string) {
-  try {
-    const supabase = createUniversalClient()
-
-    const { data, error } = await supabase
-      .from("saved_calculations")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("platform", "youtube")
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Erro ao buscar cálculos salvos do YouTube:", error)
-      return { success: false, error: "Erro ao buscar cálculos salvos" }
-    }
-
-    return { success: true, data }
-  } catch (error) {
-    console.error("Erro ao buscar cálculos salvos do YouTube:", error)
-    return { success: false, error: "Erro ao buscar cálculos salvos" }
+    return { success: true }
+  } catch (error: any) {
+    console.error("Erro ao processar solicitação:", error)
+    return { success: false, error: error.message || "Erro desconhecido" }
   }
 }
