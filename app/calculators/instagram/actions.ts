@@ -1,12 +1,45 @@
 "use server"
 
-import { createServerActionSupabaseClient } from "@/lib/supabase/server-actions"
 import { revalidatePath } from "next/cache"
+import { createServerClient } from "@/lib/supabase/server-client"
+import { saveCalculation, saveCalculationToNewTable } from "@/lib/supabase/database"
 
 export async function saveInstagramCalculation(formData: FormData) {
   try {
-    const supabase = createServerActionSupabaseClient()
+    // Obter dados do formulário
+    const name = (formData.get("name") as string) || "Instagram Calculation"
+    const followers = Number.parseInt(formData.get("followers") as string)
+    const scope = formData.get("scope") as string
+    const minReach = Number.parseInt(formData.get("minReach") as string)
+    const maxReach = Number.parseInt(formData.get("maxReach") as string)
+    const engagement = Number.parseInt(formData.get("engagement") as string)
+    const licenseDays = Number.parseInt(formData.get("licenseDays") as string)
+    const hasDiscount = formData.get("hasDiscount") === "yes"
 
+    // Calcular valores base
+    const ratePerFollower = scope === "small" ? 0.014 : 0.008
+    const baseValue = followers * ratePerFollower
+
+    // Calcular min reach value
+    const minReachValue = (followers * (minReach / 100) * 8) / 1000
+
+    // Calcular max reach value
+    const maxReachValue = (followers * (maxReach / 100) * 10) / 1000
+
+    // Calcular license value
+    const baseRate = 13.32
+    const followersInUnits = followers / 50000
+    const licenseValue = baseRate * followersInUnits * licenseDays
+
+    // Calcular valor total
+    const totalValue = baseValue + minReachValue + maxReachValue + licenseValue
+
+    // Aplicar desconto se necessário
+    const estimatedValue = hasDiscount ? totalValue * 0.9 : totalValue
+    const reelsValue = hasDiscount ? totalValue * 2 * 0.9 : totalValue * 2
+
+    // Obter usuário atual
+    const supabase = createServerClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -15,38 +48,87 @@ export async function saveInstagramCalculation(formData: FormData) {
       return { success: false, error: "Usuário não autenticado" }
     }
 
-    const followers = formData.get("followers") ? Number.parseInt(formData.get("followers") as string) : 0
-    const engagement = formData.get("engagement") ? Number.parseFloat(formData.get("engagement") as string) : 0
-    const storyViews = formData.get("storyViews") ? Number.parseInt(formData.get("storyViews") as string) : 0
-    const postValue = formData.get("postValue") ? Number.parseFloat(formData.get("postValue") as string) : 0
-    const storyValue = formData.get("storyValue") ? Number.parseFloat(formData.get("storyValue") as string) : 0
-    const reelsValue = formData.get("reelsValue") ? Number.parseFloat(formData.get("reelsValue") as string) : 0
+    // Salvar cálculo na tabela original
+    await saveCalculation(user.id, {
+      platform: "instagram",
+      name,
+      followers,
+      engagement,
+      has_discount: hasDiscount,
+      estimated_value: estimatedValue,
+    })
 
-    const { data, error } = await supabase.from("calculations").insert([
+    // Salvar cálculo na nova tabela com estrutura flexível
+    await saveCalculationToNewTable(
+      user.id,
+      "instagram",
+      name,
       {
-        user_id: user.id,
-        platform: "instagram",
-        data: {
-          followers,
-          engagement,
-          storyViews,
-          postValue,
-          storyValue,
-          reelsValue,
-        },
-        created_at: new Date().toISOString(),
+        followers,
+        scope,
+        minReach,
+        maxReach,
+        engagement,
+        licenseDays,
+        hasDiscount,
+        reelsValue,
       },
-    ])
+      estimatedValue,
+    )
+
+    // Revalidar o caminho para atualizar a UI
+    revalidatePath("/calculators/instagram")
+    revalidatePath("/dashboard")
+
+    return { success: true, data: { estimated_value: estimatedValue, reelsValue } }
+  } catch (error) {
+    console.error("Erro ao salvar cálculo do Instagram:", error)
+    return { success: false, error: "Erro ao processar o cálculo" }
+  }
+}
+
+export async function getInstagramCalculationHistory(userId: string) {
+  try {
+    const supabase = createServerClient()
+
+    const { data, error } = await supabase
+      .from("calculations")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("platform", "instagram")
+      .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Erro ao salvar cálculo:", error)
-      return { success: false, error: error.message }
+      console.error("Erro ao buscar histórico de cálculos do Instagram:", error)
+      return { success: false, error: "Erro ao buscar histórico de cálculos" }
     }
 
-    revalidatePath("/dashboard")
-    return { success: true }
+    return { success: true, data }
   } catch (error) {
-    console.error("Erro ao salvar cálculo:", error)
-    return { success: false, error: "Erro ao processar solicitação" }
+    console.error("Erro ao buscar histórico de cálculos do Instagram:", error)
+    return { success: false, error: "Erro ao buscar histórico de cálculos" }
+  }
+}
+
+export async function getInstagramSavedCalculations(userId: string) {
+  try {
+    const supabase = createServerClient()
+
+    const { data, error } = await supabase
+      .from("saved_calculations")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("platform", "instagram")
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Erro ao buscar cálculos salvos do Instagram:", error)
+      return { success: false, error: "Erro ao buscar cálculos salvos" }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error("Erro ao buscar cálculos salvos do Instagram:", error)
+    return { success: false, error: "Erro ao buscar cálculos salvos" }
   }
 }

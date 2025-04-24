@@ -1,12 +1,62 @@
 "use server"
 
-import { createServerActionSupabaseClient } from "@/lib/supabase/server-actions"
 import { revalidatePath } from "next/cache"
+import { createServerClient } from "@/lib/supabase/server-client"
+import { saveCalculation, saveCalculationToNewTable } from "@/lib/supabase/database"
+
+// Função para calcular o valor estimado do canal do YouTube
+function calculateYoutubeValue(subscribers: number, views: number, engagement: number, contentType: string): number {
+  // Base value calculation
+  const baseValue = subscribers * 0.05 + views * 0.01
+
+  // Engagement multiplier (higher engagement = higher value)
+  const engagementMultiplier = 1 + engagement / 100
+
+  // Content type multiplier
+  let contentMultiplier = 1.0
+  switch (contentType) {
+    case "education":
+      contentMultiplier = 1.3 // Educational content often has higher value
+      break
+    case "entertainment":
+      contentMultiplier = 1.2 // Entertainment is valuable but varies
+      break
+    case "gaming":
+      contentMultiplier = 1.1 // Gaming has specific audience
+      break
+    case "lifestyle":
+      contentMultiplier = 1.15 // Lifestyle often has good brand fit
+      break
+    default:
+      contentMultiplier = 1.0
+  }
+
+  // Calculate final value
+  const estimatedValue = baseValue * engagementMultiplier * contentMultiplier
+
+  // Round to 2 decimal places
+  return Math.round(estimatedValue * 100) / 100
+}
 
 export async function saveYoutubeCalculation(formData: FormData) {
   try {
-    const supabase = createServerActionSupabaseClient()
+    // Obter dados do formulário
+    const name = (formData.get("name") as string) || `YouTube Calculation - ${new Date().toLocaleDateString()}`
+    const subscribers = Number.parseInt(formData.get("subscribers") as string)
+    const views = Number.parseInt(formData.get("views") as string)
+    const engagement = Number.parseFloat(formData.get("engagement") as string)
+    const contentType = formData.get("contentType") as string
 
+    // Validar entrada
+    if (isNaN(subscribers) || isNaN(views) || isNaN(engagement)) {
+      return { success: false, error: "Dados inválidos" }
+    }
+
+    // Calcular valor estimado
+    const estimatedValue = calculateYoutubeValue(subscribers, views, engagement, contentType)
+
+    // Obter usuário atual
+    const supabase = createServerClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -15,36 +65,84 @@ export async function saveYoutubeCalculation(formData: FormData) {
       return { success: false, error: "Usuário não autenticado" }
     }
 
-    const subscribers = formData.get("subscribers") ? Number.parseInt(formData.get("subscribers") as string) : 0
-    const views = formData.get("views") ? Number.parseInt(formData.get("views") as string) : 0
-    const engagement = formData.get("engagement") ? Number.parseFloat(formData.get("engagement") as string) : 0
-    const videoValue = formData.get("videoValue") ? Number.parseFloat(formData.get("videoValue") as string) : 0
-    const shortValue = formData.get("shortValue") ? Number.parseFloat(formData.get("shortValue") as string) : 0
+    // Salvar cálculo na tabela original
+    await saveCalculation(user.id, {
+      platform: "youtube",
+      name,
+      subscribers,
+      views,
+      engagement,
+      content_type: contentType,
+      estimated_value: estimatedValue,
+    })
 
-    const { data, error } = await supabase.from("calculations").insert([
+    // Salvar cálculo na nova tabela com estrutura flexível
+    await saveCalculationToNewTable(
+      user.id,
+      "youtube",
+      name,
       {
-        user_id: user.id,
-        platform: "youtube",
-        data: {
-          subscribers,
-          views,
-          engagement,
-          videoValue,
-          shortValue,
-        },
-        created_at: new Date().toISOString(),
+        subscribers,
+        views,
+        engagement,
+        contentType,
       },
-    ])
+      estimatedValue,
+    )
+
+    // Revalidar o caminho para atualizar a UI
+    revalidatePath("/calculators/youtube")
+    revalidatePath("/dashboard")
+
+    return { success: true, data: { estimated_value: estimatedValue } }
+  } catch (error) {
+    console.error("Erro ao salvar cálculo do YouTube:", error)
+    return { success: false, error: "Erro ao processar o cálculo" }
+  }
+}
+
+export async function getYoutubeCalculationHistory(userId: string) {
+  try {
+    const supabase = createServerClient()
+
+    const { data, error } = await supabase
+      .from("calculations")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("platform", "youtube")
+      .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Erro ao salvar cálculo:", error)
-      return { success: false, error: error.message }
+      console.error("Erro ao buscar histórico de cálculos do YouTube:", error)
+      return { success: false, error: "Erro ao buscar histórico de cálculos" }
     }
 
-    revalidatePath("/dashboard")
-    return { success: true }
+    return { success: true, data }
   } catch (error) {
-    console.error("Erro ao salvar cálculo:", error)
-    return { success: false, error: "Erro ao processar solicitação" }
+    console.error("Erro ao buscar histórico de cálculos do YouTube:", error)
+    return { success: false, error: "Erro ao buscar histórico de cálculos" }
+  }
+}
+
+export async function getYoutubeSavedCalculations(userId: string) {
+  try {
+    const supabase = createServerClient()
+
+    const { data, error } = await supabase
+      .from("saved_calculations")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("platform", "youtube")
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Erro ao buscar cálculos salvos do YouTube:", error)
+      return { success: false, error: "Erro ao buscar cálculos salvos" }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error("Erro ao buscar cálculos salvos do YouTube:", error)
+    return { success: false, error: "Erro ao buscar cálculos salvos" }
   }
 }
