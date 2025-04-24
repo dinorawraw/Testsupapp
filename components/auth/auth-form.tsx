@@ -4,27 +4,14 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@supabase/supabase-js"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-
-// Criando o cliente Supabase diretamente no componente para evitar problemas de importação
-const supabaseUrl = "https://lmtxihtbvsfszywrzgeh.supabase.co"
-const supabaseKey =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtdHhpaHRidnNmc3p5d3J6Z2VoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMzY4NjksImV4cCI6MjA1OTYxMjg2OX0.Moi9zFo9l0TJV-0ueTC51BPj_HAFQoB3PKVsqmcoZ8U"
-
-const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storageKey: "supabase.auth.token",
-  },
-})
+import { useAuth } from "./auth-provider"
 
 export function AuthForm() {
   const [email, setEmail] = useState("")
@@ -35,23 +22,19 @@ export function AuthForm() {
   const [activeTab, setActiveTab] = useState("login")
   const router = useRouter()
 
+  // Usar o cliente Supabase do contexto de autenticação
+  const supabase = createClientComponentClient()
+  const { user, isLoading } = useAuth()
+
   // Verificar se já existe uma sessão ativa ao carregar o componente
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const { data } = await supabase.auth.getSession()
-        if (data.session) {
-          console.log("Sessão ativa encontrada, redirecionando para dashboard...")
-          // Usar router.push em vez de window.location
-          router.push("/dashboard")
-        }
-      } catch (error) {
-        console.error("Erro ao verificar sessão:", error)
-      }
+    if (user && !isLoading) {
+      console.log("Usuário já autenticado:", user.email)
+      const params = new URLSearchParams(window.location.search)
+      const redirectTo = params.get("redirectTo") || "/dashboard"
+      router.push(redirectTo)
     }
-
-    checkSession()
-  }, [router])
+  }, [user, isLoading, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -95,12 +78,11 @@ export function AuthForm() {
 
       console.log("Login bem-sucedido, redirecionando...")
 
-      // Modificar o redirecionamento para evitar loops
       // Verificar se há um parâmetro redirectTo na URL
       const params = new URLSearchParams(window.location.search)
       const redirectTo = params.get("redirectTo") || "/dashboard"
 
-      // Usar router.push em vez de window.location para navegação no lado do cliente
+      // Usar router.push para navegação
       router.push(redirectTo)
     } catch (error: any) {
       console.error("Erro durante o processo de login:", error)
@@ -152,8 +134,8 @@ export function AuthForm() {
 
       if (data.session) {
         console.log("Cadastro com autenticação imediata, redirecionando...")
-        // Usar window.location para garantir um redirecionamento completo
-        window.location.href = "/dashboard"
+        // Usar router.push para navegação
+        router.push("/dashboard")
       } else {
         alert("Verifique seu email para confirmar o cadastro!")
       }
@@ -195,6 +177,17 @@ export function AuthForm() {
     setFullName("")
     setError(null)
     setActiveTab(value)
+  }
+
+  // Mostrar estado de carregamento enquanto verifica a autenticação
+  if (isLoading) {
+    return (
+      <Card className="w-full max-w-md mx-auto">
+        <CardContent className="flex items-center justify-center p-6">
+          <div className="text-center">Verificando autenticação...</div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
