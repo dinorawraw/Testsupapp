@@ -1,4 +1,4 @@
-import { LoginForm } from "@/components/login-form"
+import { AuthForm } from "@/components/auth/auth-form"
 
 export default function Home() {
   return (
@@ -8,7 +8,7 @@ export default function Home() {
           <h1 className="text-2xl font-semibold tracking-tight text-white">Bem-vindo</h1>
           <p className="text-sm text-white">Digite suas credenciais para entrar na sua conta</p>
         </div>
-        <LoginForm />
+        <AuthForm />
         <p className="px-8 text-center text-sm text-white">
           <a href="/register" className="hover:text-rosa underline underline-offset-4">
             Não tem uma conta? Cadastre-se
