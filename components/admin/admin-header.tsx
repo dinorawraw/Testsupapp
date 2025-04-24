@@ -1,8 +1,10 @@
 "use client"
 
 import type React from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { LogOut } from "lucide-react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
@@ -16,20 +18,38 @@ interface AdminHeaderProps {
 export function AdminHeader({ heading, text, children }: AdminHeaderProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const supabase = createClientComponentClient()
 
-  const handleLogout = () => {
-    // Em uma aplicação real, você chamaria uma API para fazer logout
-    // e invalidar a sessão do usuário
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true)
 
-    toast({
-      title: "Logout realizado",
-      description: "Você foi desconectado com sucesso.",
-    })
+      // Fazer logout usando o cliente Supabase
+      const { error } = await supabase.auth.signOut()
 
-    // Redirecionar para a página de login
-    setTimeout(() => {
+      if (error) {
+        throw error
+      }
+
+      toast({
+        title: "Logout realizado",
+        description: "Você foi desconectado com sucesso.",
+      })
+
+      // Redirecionar para a página de login
       router.push("/login")
-    }, 1000)
+      router.refresh()
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error)
+      toast({
+        title: "Erro ao fazer logout",
+        description: "Ocorreu um erro ao tentar desconectar. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
   return (
@@ -40,9 +60,15 @@ export function AdminHeader({ heading, text, children }: AdminHeaderProps) {
       </div>
       <div className="flex items-center gap-4">
         {children}
-        <Button variant="outline" size="sm" onClick={handleLogout} className="flex items-center gap-2 gradient-hover">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="flex items-center gap-2 gradient-hover"
+        >
           <LogOut className="h-4 w-4" />
-          <span>Sair</span>
+          <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>
         </Button>
       </div>
     </div>
