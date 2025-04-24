@@ -159,13 +159,14 @@ export function TikTokCalculator() {
     try {
       const values = form.getValues()
 
+      // Criar FormData para enviar ao servidor
       const formData = new FormData()
       formData.append("name", saveName)
       formData.append("followers", values.followers)
       formData.append("views", values.views)
       formData.append("likes", values.likes)
       formData.append("comments", values.comments)
-      formData.append("hasDiscount", values.hasDiscount === "yes" ? "yes" : "no")
+      formData.append("hasDiscount", values.hasDiscount)
 
       const response = await saveTikTokCalculation(formData)
 

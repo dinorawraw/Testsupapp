@@ -193,6 +193,7 @@ export function YoutubeCalculator() {
     setLoading(true)
 
     try {
+      // Criar FormData para enviar ao servidor
       const formDataObj = new FormData()
       formDataObj.append("name", saveName)
       formDataObj.append("subscribers", formData.subscribers)
