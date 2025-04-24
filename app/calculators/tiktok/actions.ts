@@ -1,8 +1,11 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createServerClient } from "@/lib/supabase/server-client"
-import { saveCalculation, saveCalculationToNewTable } from "@/lib/supabase/database"
+import {
+  createUniversalClient,
+  universalSaveCalculation,
+  universalSaveCalculationToNewTable,
+} from "@/lib/supabase/universal-client"
 
 export async function saveTikTokCalculation(formData: FormData) {
   try {
@@ -40,7 +43,7 @@ export async function saveTikTokCalculation(formData: FormData) {
     const estimatedValue = hasDiscount ? adjustedValue * 0.9 : adjustedValue
 
     // Obter usuário atual
-    const supabase = createServerClient()
+    const supabase = createUniversalClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -50,7 +53,7 @@ export async function saveTikTokCalculation(formData: FormData) {
     }
 
     // Salvar cálculo na tabela original
-    await saveCalculation(user.id, {
+    await universalSaveCalculation(user.id, {
       platform: "tiktok",
       name,
       followers,
@@ -63,7 +66,7 @@ export async function saveTikTokCalculation(formData: FormData) {
     })
 
     // Salvar cálculo na nova tabela com estrutura flexível
-    await saveCalculationToNewTable(
+    await universalSaveCalculationToNewTable(
       user.id,
       "tiktok",
       name,
@@ -91,7 +94,7 @@ export async function saveTikTokCalculation(formData: FormData) {
 
 export async function getTikTokCalculationHistory(userId: string) {
   try {
-    const supabase = createServerClient()
+    const supabase = createUniversalClient()
 
     const { data, error } = await supabase
       .from("calculations")
@@ -114,7 +117,7 @@ export async function getTikTokCalculationHistory(userId: string) {
 
 export async function getTikTokSavedCalculations(userId: string) {
   try {
-    const supabase = createServerClient()
+    const supabase = createUniversalClient()
 
     const { data, error } = await supabase
       .from("saved_calculations")

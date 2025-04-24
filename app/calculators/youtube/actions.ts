@@ -1,8 +1,11 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createServerClient } from "@/lib/supabase/server-client"
-import { saveCalculation, saveCalculationToNewTable } from "@/lib/supabase/database"
+import {
+  createUniversalClient,
+  universalSaveCalculation,
+  universalSaveCalculationToNewTable,
+} from "@/lib/supabase/universal-client"
 
 // Função para calcular o valor estimado do canal do YouTube
 function calculateYoutubeValue(subscribers: number, views: number, engagement: number, contentType: string): number {
@@ -56,7 +59,7 @@ export async function saveYoutubeCalculation(formData: FormData) {
     const estimatedValue = calculateYoutubeValue(subscribers, views, engagement, contentType)
 
     // Obter usuário atual
-    const supabase = createServerClient()
+    const supabase = createUniversalClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -66,7 +69,7 @@ export async function saveYoutubeCalculation(formData: FormData) {
     }
 
     // Salvar cálculo na tabela original
-    await saveCalculation(user.id, {
+    await universalSaveCalculation(user.id, {
       platform: "youtube",
       name,
       subscribers,
@@ -77,7 +80,7 @@ export async function saveYoutubeCalculation(formData: FormData) {
     })
 
     // Salvar cálculo na nova tabela com estrutura flexível
-    await saveCalculationToNewTable(
+    await universalSaveCalculationToNewTable(
       user.id,
       "youtube",
       name,
@@ -103,7 +106,7 @@ export async function saveYoutubeCalculation(formData: FormData) {
 
 export async function getYoutubeCalculationHistory(userId: string) {
   try {
-    const supabase = createServerClient()
+    const supabase = createUniversalClient()
 
     const { data, error } = await supabase
       .from("calculations")
@@ -126,7 +129,7 @@ export async function getYoutubeCalculationHistory(userId: string) {
 
 export async function getYoutubeSavedCalculations(userId: string) {
   try {
-    const supabase = createServerClient()
+    const supabase = createUniversalClient()
 
     const { data, error } = await supabase
       .from("saved_calculations")

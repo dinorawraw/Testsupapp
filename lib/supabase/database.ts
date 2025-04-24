@@ -1,37 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
-import { cookies } from "next/headers"
-
-// Inicializar cliente Supabase para componentes de servidor
-export function createServerComponentClient() {
-  const cookieStore = cookies()
-
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
-      },
-    },
-  })
-}
-
-// Inicializar cliente Supabase para ações do servidor
-export function createServerActionClient() {
-  const cookieStore = cookies()
-
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
-      },
-      set(name: string, value: string, options: any) {
-        cookieStore.set({ name, value, ...options })
-      },
-      remove(name: string, options: any) {
-        cookieStore.set({ name, value: "", ...options })
-      },
-    },
-  })
-}
+import { createUniversalClient } from "./universal-client"
 
 // Cliente Supabase para uso no lado do cliente
 export const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
@@ -63,7 +31,7 @@ export interface SavedCalculation {
 
 // Funções para cálculos (tabela original)
 export async function saveCalculation(userId: string, calculationData: CalculationData) {
-  const supabase = createServerActionClient()
+  const supabase = createUniversalClient()
 
   const { data, error } = await supabase
     .from("calculations")
@@ -85,7 +53,7 @@ export async function saveCalculation(userId: string, calculationData: Calculati
 }
 
 export async function getCalculationsByUserId(userId: string) {
-  const supabase = createServerComponentClient()
+  const supabase = createUniversalClient()
 
   const { data, error } = await supabase
     .from("calculations")
@@ -109,7 +77,7 @@ export async function saveCalculationToNewTable(
   data: Record<string, any>,
   result: number,
 ) {
-  const supabase = createServerActionClient()
+  const supabase = createUniversalClient()
 
   const { data: savedData, error } = await supabase
     .from("saved_calculations")
@@ -133,7 +101,7 @@ export async function saveCalculationToNewTable(
 }
 
 export async function getSavedCalculationsByPlatform(userId: string, platform: string) {
-  const supabase = createServerComponentClient()
+  const supabase = createUniversalClient()
 
   const { data, error } = await supabase
     .from("saved_calculations")
@@ -151,7 +119,7 @@ export async function getSavedCalculationsByPlatform(userId: string, platform: s
 }
 
 export async function getAllSavedCalculations(userId: string) {
-  const supabase = createServerComponentClient()
+  const supabase = createUniversalClient()
 
   const { data, error } = await supabase
     .from("saved_calculations")
@@ -169,7 +137,7 @@ export async function getAllSavedCalculations(userId: string) {
 
 // Funções para assinaturas e planos
 export async function getAllSubscriptionPlans() {
-  const supabase = createServerComponentClient()
+  const supabase = createUniversalClient()
 
   const { data, error } = await supabase.from("subscription_plans").select("*").order("price", { ascending: true })
 
@@ -182,7 +150,7 @@ export async function getAllSubscriptionPlans() {
 }
 
 export async function getUserSubscription(userId: string) {
-  const supabase = createServerComponentClient()
+  const supabase = createUniversalClient()
 
   const { data, error } = await supabase
     .from("subscriptions")

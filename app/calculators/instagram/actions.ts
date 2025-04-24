@@ -1,8 +1,11 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createServerClient } from "@/lib/supabase/server-client"
-import { saveCalculation, saveCalculationToNewTable } from "@/lib/supabase/database"
+import {
+  createUniversalClient,
+  universalSaveCalculation,
+  universalSaveCalculationToNewTable,
+} from "@/lib/supabase/universal-client"
 
 export async function saveInstagramCalculation(formData: FormData) {
   try {
@@ -39,7 +42,7 @@ export async function saveInstagramCalculation(formData: FormData) {
     const reelsValue = hasDiscount ? totalValue * 2 * 0.9 : totalValue * 2
 
     // Obter usuário atual
-    const supabase = createServerClient()
+    const supabase = createUniversalClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -49,7 +52,7 @@ export async function saveInstagramCalculation(formData: FormData) {
     }
 
     // Salvar cálculo na tabela original
-    await saveCalculation(user.id, {
+    await universalSaveCalculation(user.id, {
       platform: "instagram",
       name,
       followers,
@@ -59,7 +62,7 @@ export async function saveInstagramCalculation(formData: FormData) {
     })
 
     // Salvar cálculo na nova tabela com estrutura flexível
-    await saveCalculationToNewTable(
+    await universalSaveCalculationToNewTable(
       user.id,
       "instagram",
       name,
@@ -89,7 +92,7 @@ export async function saveInstagramCalculation(formData: FormData) {
 
 export async function getInstagramCalculationHistory(userId: string) {
   try {
-    const supabase = createServerClient()
+    const supabase = createUniversalClient()
 
     const { data, error } = await supabase
       .from("calculations")
@@ -112,7 +115,7 @@ export async function getInstagramCalculationHistory(userId: string) {
 
 export async function getInstagramSavedCalculations(userId: string) {
   try {
-    const supabase = createServerClient()
+    const supabase = createUniversalClient()
 
     const { data, error } = await supabase
       .from("saved_calculations")
