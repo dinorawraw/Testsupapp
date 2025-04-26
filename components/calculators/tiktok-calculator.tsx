@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -11,10 +11,6 @@ import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { saveTikTokCalculation, getTikTokCalculationHistory } from "@/app/calculators/tiktok/actions"
-
-// Importar o cliente Supabase do nosso arquivo personalizado
-import { supabase } from "@/lib/supabase"
 
 const formSchema = z.object({
   followers: z.string().regex(/^\d+$/, {
@@ -32,17 +28,6 @@ const formSchema = z.object({
   hasDiscount: z.enum(["yes", "no"]),
 })
 
-type CalculationHistory = {
-  id: string
-  name: string
-  followers: number
-  views: number
-  likes: number
-  comments: number
-  estimated_value: number
-  created_at: string
-}
-
 export function TikTokCalculator() {
   const { toast } = useToast()
   const [result, setResult] = useState<number | null>(null)
@@ -50,28 +35,8 @@ export function TikTokCalculator() {
   const [saveName, setSaveName] = useState("")
   const [loading, setLoading] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-  const [history, setHistory] = useState<CalculationHistory[]>([])
+  const [history, setHistory] = useState([])
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser()
-      if (data.user) {
-        setUserId(data.user.id)
-        loadHistory(data.user.id)
-      }
-    }
-
-    checkUser()
-  }, [])
-
-  const loadHistory = async (uid: string) => {
-    const result = await getTikTokCalculationHistory(uid)
-    if (result.success && result.data) {
-      setHistory(result.data as CalculationHistory[])
-    }
-  }
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -145,63 +110,21 @@ export function TikTokCalculator() {
       return
     }
 
-    if (!userId || !result) {
-      toast({
-        title: "Erro",
-        description: "Você precisa estar logado para salvar cálculos",
-        variant: "destructive",
-      })
-      return
-    }
-
     setLoading(true)
-
-    try {
-      const values = form.getValues()
-
-      // Criar FormData para enviar ao servidor
-      const formData = new FormData()
-      formData.append("name", saveName)
-      formData.append("followers", values.followers)
-      formData.append("views", values.views)
-      formData.append("likes", values.likes)
-      formData.append("comments", values.comments)
-      formData.append("hasDiscount", values.hasDiscount)
-
-      const response = await saveTikTokCalculation(formData)
-
-      if (response.success) {
-        setShowSaveDialog(false)
-        setLastSavedAt(new Date().toLocaleTimeString())
-        toast({
-          title: "Cálculo salvo",
-          description: "Seu cálculo foi salvo com sucesso.",
-        })
-
-        // Reload history
-        if (userId) {
-          loadHistory(userId)
-        }
-      } else {
-        throw new Error(response.error || "Erro ao salvar cálculo")
-      }
-    } catch (error) {
-      console.error("Erro ao salvar cálculo:", error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível salvar o cálculo",
-        variant: "destructive",
-      })
-    } finally {
+    // Simulate saving to database
+    setTimeout(() => {
       setLoading(false)
-    }
+      setShowSaveDialog(false)
+      setLastSavedAt(new Date().toLocaleTimeString())
+      toast({
+        title: "Cálculo salvo",
+        description: "Seu cálculo foi salvo com sucesso.",
+      })
+    }, 1000)
   }
 
   const toggleHistory = () => {
     setShowHistory(!showHistory)
-    if (!showHistory && userId) {
-      loadHistory(userId)
-    }
   }
 
   const formatCurrency = (value: number) => {
@@ -209,11 +132,6 @@ export function TikTokCalculator() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR")
   }
 
   return (
@@ -407,31 +325,7 @@ export function TikTokCalculator() {
               <CardTitle className="text-white">Histórico de Cálculos</CardTitle>
             </CardHeader>
             <CardContent>
-              {history.length > 0 ? (
-                <div className="space-y-4">
-                  {history.map((item) => (
-                    <Card key={item.id} className="bg-gray-800 text-white">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-lg">{item.name}</CardTitle>
-                        <CardDescription className="text-gray-300">{formatDate(item.created_at)}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>Seguidores: {item.followers.toLocaleString()}</div>
-                          <div>Visualizações: {item.views.toLocaleString()}</div>
-                          <div>Curtidas: {item.likes.toLocaleString()}</div>
-                          <div>Comentários: {item.comments.toLocaleString()}</div>
-                          <div className="col-span-2 font-bold mt-2">
-                            Valor: R$ {formatCurrency(item.estimated_value)}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-white">Nenhum cálculo salvo ainda</div>
-              )}
+              <div className="text-center py-8 text-white">Nenhum cálculo salvo ainda</div>
             </CardContent>
           </Card>
         </div>

@@ -4,15 +4,18 @@ import { useState, useEffect } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { saveInstagramCalculation, getInstagramCalculationHistory } from "@/app/calculators/instagram/actions"
 import { supabase } from "@/lib/supabase"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { ArrowLeft, Save } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 const formSchema = z.object({
   followers: z.string().regex(/^\d+$/, {
@@ -49,6 +52,7 @@ type CalculationHistory = {
 
 export function InstagramCalculator() {
   const { toast } = useToast()
+  const router = useRouter()
   const [result, setResult] = useState<number | null>(null)
   const [reelsValue, setReelsValue] = useState<number | null>(null)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
@@ -166,7 +170,7 @@ export function InstagramCalculator() {
     try {
       const values = form.getValues()
 
-      // Criar FormData para enviar ao servidor
+      // Create FormData to send to the server
       const formData = new FormData()
       formData.append("name", saveName)
       formData.append("followers", values.followers)
@@ -195,10 +199,10 @@ export function InstagramCalculator() {
         throw new Error(response.error || "Error saving calculation")
       }
     } catch (error) {
-      console.error("Error saving calculation:", error)
+      console.error("Error saving calculation", error)
       toast({
         title: "Error",
-        description: "Could not save the calculation",
+        description: "Failed to save calculation. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -208,42 +212,31 @@ export function InstagramCalculator() {
 
   const toggleHistory = () => {
     setShowHistory(!showHistory)
-    if (!showHistory && userId) {
-      loadHistory(userId)
-    }
-  }
-
-  const formatCurrency = (value: number) => {
-    return value.toFixed(2)
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR")
   }
 
   return (
-    <>
-      <Card className="mb-8 card-gradient">
-        <CardHeader className="border-b gradient-border">
-          <CardTitle className="text-2xl text-white">Calculadora de Publis - Instagram</CardTitle>
-          <CardDescription className="text-white">
-            Calculate potential earnings for your Instagram content
-          </CardDescription>
-        </CardHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <CardContent className="space-y-4 pt-6">
+    <div className="container mx-auto p-4">
+      <div className="mb-4">
+        <Button variant="outline" size="sm" onClick={() => router.back()} className="mb-4">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          <h2 className="text-2xl font-bold mb-6">Instagram Calculator</h2>
+
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
                 control={form.control}
                 name="followers"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-white">Número de Seguidores</FormLabel>
+                    <FormLabel>Number of Followers</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. 10000" {...field} />
                     </FormControl>
-                    <FormDescription className="text-white">Enter your total number of followers</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -253,39 +246,43 @@ export function InstagramCalculator() {
                 control={form.control}
                 name="scope"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-white">Escopo</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select scope" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="small">Pequeno</SelectItem>
-                        <SelectItem value="large">Grande</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription className="text-white">
-                      Se o escopo de entrega for pequeno o valor será cobrado normal, caso seja um escopo maior é
-                      adicionado um pequeno desconto
-                    </FormDescription>
+                  <FormItem className="space-y-3">
+                    <FormLabel>Scope</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="flex flex-col space-y-1"
+                      >
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="small" />
+                          </FormControl>
+                          <FormLabel className="font-normal">Small (Local/Regional)</FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="large" />
+                          </FormControl>
+                          <FormLabel className="font-normal">Large (National/International)</FormLabel>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
                   name="minReach"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Alcance Mínimo (%)</FormLabel>
+                      <FormLabel>Minimum Reach (%)</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g. 5" {...field} />
                       </FormControl>
-                      <FormDescription className="text-white">Porcentagem de alcance mínimo</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -296,11 +293,10 @@ export function InstagramCalculator() {
                   name="maxReach"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Alcance Máximo (%)</FormLabel>
+                      <FormLabel>Maximum Reach (%)</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g. 50" {...field} />
                       </FormControl>
-                      <FormDescription className="text-white">Porcentagem de alcance máximo</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -312,11 +308,10 @@ export function InstagramCalculator() {
                 name="engagement"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-white">Taxa de Engajamento (%)</FormLabel>
+                    <FormLabel>Engagement Rate (%)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. 3.0" {...field} />
+                      <Input placeholder="e.g. 3" {...field} />
                     </FormControl>
-                    <FormDescription className="text-white">Porcentagem de engajamento no seu conteúdo</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -327,11 +322,10 @@ export function InstagramCalculator() {
                 name="licenseDays"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-white">Dias de Licenciamento de Imagem</FormLabel>
+                    <FormLabel>License Duration (days)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. 1" {...field} />
+                      <Input placeholder="e.g. 30" {...field} />
                     </FormControl>
-                    <FormDescription className="text-white">Quantos dias essa campanha vai rodar</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -341,174 +335,123 @@ export function InstagramCalculator() {
                 control={form.control}
                 name="hasDiscount"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-white">Cliente pediu desconto?</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select option" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="no">Não</SelectItem>
-                        <SelectItem value="yes">Sim</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription className="text-white">
-                      Caso o cliente retorne pedindo desconto, selecione "Sim" para aplicar um desconto de 10%
-                    </FormDescription>
+                  <FormItem className="space-y-3">
+                    <FormLabel>Apply Discount?</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="flex flex-col space-y-1"
+                      >
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="yes" />
+                          </FormControl>
+                          <FormLabel className="font-normal">Yes (10% discount)</FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="no" />
+                          </FormControl>
+                          <FormLabel className="font-normal">No</FormLabel>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </CardContent>
-            <CardFooter>
-              <Button type="submit" className="w-full text-white">
-                Calcular
+
+              <Button type="submit" className="w-full">
+                Calculate
               </Button>
-            </CardFooter>
-          </form>
-        </Form>
+            </form>
+          </Form>
+
+          {result !== null && (
+            <div className="mt-8 p-4 border rounded-md bg-muted">
+              <h3 className="text-xl font-semibold mb-2">Results</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Feed Post Value:</p>
+                  <p className="text-2xl font-bold">${result.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Reels Value:</p>
+                  <p className="text-2xl font-bold">${reelsValue?.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-between items-center">
+                <Button onClick={showSavePrompt} disabled={loading}>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Calculation
+                </Button>
+
+                {lastSavedAt && <p className="text-sm text-muted-foreground">Last saved at: {lastSavedAt}</p>}
+              </div>
+            </div>
+          )}
+
+          {userId && (
+            <div className="mt-6">
+              <Button variant="outline" onClick={toggleHistory} className="w-full">
+                {showHistory ? "Hide History" : "Show Calculation History"}
+              </Button>
+
+              {showHistory && (
+                <div className="mt-4">
+                  <h3 className="text-xl font-semibold mb-2">Your Saved Calculations</h3>
+                  {history.length > 0 ? (
+                    <div className="space-y-2">
+                      {history.map((item) => (
+                        <div key={item.id} className="p-3 border rounded-md">
+                          <div className="flex justify-between">
+                            <p className="font-medium">{item.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(item.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <p className="text-sm">Followers: {item.followers.toLocaleString()}</p>
+                          <p className="font-semibold mt-1">Value: ${item.estimated_value.toFixed(2)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">No saved calculations yet.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
       </Card>
 
-      {result !== null && (
-        <>
-          <Card className="mb-4 card-gradient">
-            <CardHeader className="border-b gradient-border">
-              <CardTitle className="text-white">VALORES STORIES</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
-                <div className="pt-4">
-                  {form.watch("hasDiscount") === "yes" && (
-                    <div className="flex justify-between items-center text-lg mb-2 text-white">
-                      <span>Valor Original:</span>
-                      <span className="line-through">R$ {formatCurrency(result / 0.9)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center text-lg font-bold text-white">
-                    <span>Valor Total{form.watch("hasDiscount") === "yes" ? " com Desconto" : ""}:</span>
-                    <span>R$ {formatCurrency(result)}</span>
-                  </div>
-                  {form.watch("hasDiscount") === "yes" && (
-                    <div className="text-sm text-green-500 text-right mt-1">Desconto de 10% aplicado</div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="mb-4 card-gradient">
-            <CardHeader className="border-b gradient-border">
-              <CardTitle className="text-white">VALORES REELS</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
-                <div className="pt-4">
-                  {form.watch("hasDiscount") === "yes" && (
-                    <div className="flex justify-between items-center text-lg mb-2 text-white">
-                      <span>Valor Original:</span>
-                      <span className="line-through">R$ {formatCurrency(reelsValue! / 0.9)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center text-lg font-bold text-white">
-                    <span>Valor Total{form.watch("hasDiscount") === "yes" ? " com Desconto" : ""}:</span>
-                    <span>R$ {formatCurrency(reelsValue!)}</span>
-                  </div>
-                  {form.watch("hasDiscount") === "yes" && (
-                    <div className="text-sm text-green-500 text-right mt-1">Desconto de 10% aplicado</div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-gradient">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between gap-4">
-                <Button onClick={showSavePrompt} disabled={loading} className="text-white">
-                  {loading ? "Salvando..." : "Salvar Cálculo"}
-                </Button>
-                <Button onClick={toggleHistory} variant="outline" className="text-white">
-                  Ver Histórico
-                </Button>
-                {lastSavedAt && <span className="text-sm text-white">Último salvamento: {lastSavedAt}</span>}
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      )}
-
-      {/* Save Dialog */}
-      {showSaveDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="max-w-md w-full card-gradient">
-            <CardHeader>
-              <CardTitle className="text-white">Salvar Cálculo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <FormLabel className="text-white">Nome do Cálculo</FormLabel>
-                <Input
-                  value={saveName}
-                  onChange={(e) => setSaveName(e.target.value)}
-                  placeholder="Digite um nome para identificar este cálculo"
-                />
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-end gap-3">
-              <Button variant="outline" onClick={cancelSave} className="text-white">
-                Cancelar
-              </Button>
-              <Button onClick={saveCalculation} disabled={loading} className="text-white">
-                {loading ? "Salvando..." : "Salvar"}
-              </Button>
-            </CardFooter>
-          </Card>
-        </div>
-      )}
-
-      {/* History Dialog */}
-      {showHistory && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="max-w-2xl w-full max-h-[80vh] overflow-y-auto card-gradient">
-            <CardHeader className="relative">
-              <Button variant="ghost" size="icon" className="absolute right-4 top-4" onClick={toggleHistory}>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-              </Button>
-              <CardTitle className="text-white">Histórico de Cálculos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {history.length > 0 ? (
-                <div className="space-y-4">
-                  {history.map((item) => (
-                    <Card key={item.id} className="bg-gray-800 text-white">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-lg">{item.name || "Instagram Calculation"}</CardTitle>
-                        <CardDescription className="text-gray-300">{formatDate(item.created_at)}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>Seguidores: {item.followers.toLocaleString()}</div>
-                          {item.scope && <div>Escopo: {item.scope === "small" ? "Pequeno" : "Grande"}</div>}
-                          {item.engagement && <div>Engajamento: {item.engagement}%</div>}
-                          <div className="col-span-2 font-bold mt-2">
-                            Valor: R$ {formatCurrency(item.estimated_value)}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-white">Nenhum cálculo salvo ainda</div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </>
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Calculation</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="save-name">Name for this calculation</Label>
+            <Input
+              id="save-name"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="e.g. Client A Campaign"
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelSave} disabled={loading}>
+              Cancel
+            </Button>
+            <Button onClick={saveCalculation} disabled={loading}>
+              {loading ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }

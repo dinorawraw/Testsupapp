@@ -40,7 +40,7 @@ export function LogoutButton({ variant = "destructive", size = "default", classN
       })
 
       console.log("Logout bem-sucedido")
-      router.push("/login")
+      router.push("/")
       router.refresh()
     } catch (error) {
       console.error("Falha ao fazer logout:", error)

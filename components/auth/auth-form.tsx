@@ -142,6 +142,8 @@ export function AuthForm() {
     try {
       console.log("Tentando criar conta com:", email)
 
+      // Registrar o usuário na autenticação
+      // O trigger do banco de dados criará automaticamente o perfil
       const { data, error } = await supabase.auth.signUp({
         email,
         password,

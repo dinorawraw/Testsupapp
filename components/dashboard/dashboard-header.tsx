@@ -1,13 +1,16 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+
+import Link from "next/link"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LogOut } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { isCurrentUserAdmin } from "@/lib/auth-utils"
 
 interface DashboardHeaderProps {
   heading: string
@@ -19,7 +22,17 @@ export function DashboardHeader({ heading, text, children }: DashboardHeaderProp
   const router = useRouter()
   const { toast } = useToast()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const supabase = createClientComponentClient()
+
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      const adminStatus = await isCurrentUserAdmin()
+      setIsAdmin(adminStatus)
+    }
+
+    checkAdminStatus()
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -37,8 +50,8 @@ export function DashboardHeader({ heading, text, children }: DashboardHeaderProp
         description: "Você foi desconectado com sucesso.",
       })
 
-      // Redirecionar para a página de login
-      router.push("/login")
+      // Redirecionar para a página inicial (que deve ter o formulário de login)
+      router.push("/")
       router.refresh()
     } catch (error) {
       console.error("Erro ao fazer logout:", error)
@@ -60,6 +73,13 @@ export function DashboardHeader({ heading, text, children }: DashboardHeaderProp
       </div>
       <div className="flex items-center gap-4">
         {children}
+        {isAdmin && (
+          <Link href="/admin" passHref>
+            <Button variant="outline" className="bg-purple-600 text-white hover:bg-purple-700 hover:text-white">
+              Painel Admin
+            </Button>
+          </Link>
+        )}
         <Button
           variant="outline"
           size="sm"
