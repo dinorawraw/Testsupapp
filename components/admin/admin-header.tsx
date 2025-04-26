@@ -32,7 +32,7 @@ export function AdminHeader({
         description: "You have been successfully logged out.",
       })
 
-      router.push("/login")
+      router.push("/")
       router.refresh()
     } catch (error) {
       console.error("Error logging out:", error)
