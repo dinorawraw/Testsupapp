@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Lightbulb, BarChart2, MessageSquare, Lock } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,14 +10,66 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { IdeaBoard } from "@/components/subscriber/idea-board"
 import { InsightsBlog } from "@/components/subscriber/insights-blog"
 import { PersonalConsultation } from "@/components/subscriber/personal-consultation"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 export function SubscriberSpace() {
   const { toast } = useToast()
-  // This would be fetched from your API in a real application
   const [subscription, setSubscription] = useState({
-    tier: "free", // or "premium"
+    tier: "loading", // "loading", "free", or "premium"
+    isLoading: true,
   })
   const [activeDialog, setActiveDialog] = useState<"ideas" | "insights" | "consultation" | null>(null)
+  const supabase = createClientComponentClient()
+
+  // Buscar o status da assinatura do usuário
+  useEffect(() => {
+    async function fetchSubscriptionStatus() {
+      try {
+        // Obter o usuário atual
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError || !user) {
+          console.error("Erro ao obter usuário:", userError)
+          setSubscription({ tier: "free", isLoading: false })
+          return
+        }
+
+        // Buscar assinatura ativa do usuário
+        const { data: subscriptionData, error: subscriptionError } = await supabase
+          .from("subscriptions")
+          .select(`
+            *,
+            subscription_plans(*)
+          `)
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .single()
+
+        if (subscriptionError) {
+          console.error("Erro ao buscar assinatura:", subscriptionError)
+          setSubscription({ tier: "free", isLoading: false })
+          return
+        }
+
+        // Verificar se o usuário tem assinatura premium
+        const isPremium = subscriptionData?.subscription_plans?.name === "premium"
+        setSubscription({
+          tier: isPremium ? "premium" : "free",
+          isLoading: false,
+        })
+
+        console.log("Status da assinatura:", isPremium ? "premium" : "free")
+      } catch (error) {
+        console.error("Erro ao verificar assinatura:", error)
+        setSubscription({ tier: "free", isLoading: false })
+      }
+    }
+
+    fetchSubscriptionStatus()
+  }, [supabase])
 
   const handlePremiumFeature = (feature: "ideas" | "insights" | "consultation") => {
     if (subscription.tier !== "premium") {
@@ -29,6 +81,27 @@ export function SubscriberSpace() {
     } else {
       setActiveDialog(feature)
     }
+  }
+
+  if (subscription.isLoading) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-white">Espaço do Assinante</h2>
+        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="gradient-border opacity-70">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-white">Carregando...</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm text-white mb-4">Carregando recursos...</div>
+                <div className="w-full h-8 bg-gray-700 rounded animate-pulse"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
