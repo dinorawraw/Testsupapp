@@ -18,209 +18,62 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
+import {
+  type Consultation,
+  type ConsultationMessage,
+  createConsultation,
+  createMessage,
+  getConsultationMessages,
+  getConsultationsByUserId,
+  markMessagesAsRead,
+} from "@/lib/supabase/consultation-service"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
-// Tipo para as mensagens
-interface Message {
-  id: string
-  content: string
-  sender: "user" | "admin"
-  timestamp: string
-  attachments?: {
-    type: "image" | "document"
-    url: string
-    name: string
-  }[]
-  isRead: boolean
-}
-
-// Tipo para as consultorias
-interface Consultation {
-  id: string
-  title: string
-  status: "active" | "scheduled" | "completed"
-  lastMessage?: string
-  lastMessageTime?: string
+interface EnhancedConsultation extends Consultation {
+  messages: ConsultationMessage[]
   unreadCount: number
-  messages: Message[]
-  scheduledDate?: string
 }
-
-// Dados de exemplo para as consultorias
-const mockConsultations: Consultation[] = [
-  {
-    id: "1",
-    title: "Estratégia de Conteúdo para Instagram",
-    status: "active",
-    lastMessage: "Vamos analisar seus insights e propor uma estratégia personalizada.",
-    lastMessageTime: "2023-06-28T14:30:00",
-    unreadCount: 2,
-    messages: [
-      {
-        id: "1",
-        content:
-          "Olá! Gostaria de ajuda para desenvolver uma estratégia de conteúdo para o Instagram. Estou tendo dificuldades para aumentar meu engajamento.",
-        sender: "user",
-        timestamp: "2023-06-28T10:15:00",
-        isRead: true,
-      },
-      {
-        id: "2",
-        content:
-          "Olá! Claro, posso ajudar com isso. Poderia me contar um pouco mais sobre seu perfil? Qual é o seu nicho e público-alvo?",
-        sender: "admin",
-        timestamp: "2023-06-28T10:30:00",
-        isRead: true,
-      },
-      {
-        id: "3",
-        content:
-          "Meu perfil é focado em moda sustentável. Meu público-alvo são mulheres entre 25-35 anos interessadas em consumo consciente. Tenho cerca de 5.000 seguidores, mas o engajamento está baixo ultimamente.",
-        sender: "user",
-        timestamp: "2023-06-28T11:00:00",
-        isRead: true,
-      },
-      {
-        id: "4",
-        content:
-          "Entendi! Vou analisar seu perfil e preparar algumas recomendações. Você poderia compartilhar seus insights do Instagram para que eu possa ver os dados de desempenho?",
-        sender: "admin",
-        timestamp: "2023-06-28T11:15:00",
-        isRead: true,
-      },
-      {
-        id: "5",
-        content: "Claro! Aqui estão os insights dos últimos 30 dias.",
-        sender: "user",
-        timestamp: "2023-06-28T11:30:00",
-        attachments: [
-          {
-            type: "image",
-            url: "/placeholder.svg?height=300&width=400",
-            name: "insights-instagram.jpg",
-          },
-        ],
-        isRead: true,
-      },
-      {
-        id: "6",
-        content:
-          "Obrigado pelos insights! Analisando os dados, percebo que seus Reels têm um desempenho significativamente melhor que as fotos estáticas. Vamos focar em aumentar a frequência desse formato.",
-        sender: "admin",
-        timestamp: "2023-06-28T14:00:00",
-        isRead: true,
-      },
-      {
-        id: "7",
-        content: "Vamos analisar seus insights e propor uma estratégia personalizada.",
-        sender: "admin",
-        timestamp: "2023-06-28T14:30:00",
-        attachments: [
-          {
-            type: "document",
-            url: "#",
-            name: "estrategia-instagram.pdf",
-          },
-        ],
-        isRead: false,
-      },
-    ],
-  },
-  {
-    id: "2",
-    title: "Consultoria de Monetização de Canal",
-    status: "scheduled",
-    scheduledDate: "2023-07-05T15:00:00",
-    unreadCount: 0,
-    messages: [
-      {
-        id: "1",
-        content:
-          "Olá! Gostaria de agendar uma consultoria para discutir estratégias de monetização para meu canal do YouTube.",
-        sender: "user",
-        timestamp: "2023-06-25T09:00:00",
-        isRead: true,
-      },
-      {
-        id: "2",
-        content: "Olá! Ficarei feliz em ajudar. Podemos agendar para a próxima semana. Que tal dia 5 de julho às 15h?",
-        sender: "admin",
-        timestamp: "2023-06-25T09:30:00",
-        isRead: true,
-      },
-      {
-        id: "3",
-        content: "Perfeito! Fica agendado então. Obrigado!",
-        sender: "user",
-        timestamp: "2023-06-25T10:00:00",
-        isRead: true,
-      },
-    ],
-  },
-  {
-    id: "3",
-    title: "Análise de Performance de TikTok",
-    status: "completed",
-    lastMessage: "Espero que as recomendações tenham sido úteis. Qualquer dúvida, estou à disposição!",
-    lastMessageTime: "2023-06-20T16:45:00",
-    unreadCount: 0,
-    messages: [
-      {
-        id: "1",
-        content: "Preciso de ajuda para entender por que meus vídeos no TikTok não estão performando bem.",
-        sender: "user",
-        timestamp: "2023-06-18T13:00:00",
-        isRead: true,
-      },
-      {
-        id: "2",
-        content: "Olá! Vamos analisar juntos. Poderia compartilhar alguns exemplos dos seus vídeos recentes?",
-        sender: "admin",
-        timestamp: "2023-06-18T13:15:00",
-        isRead: true,
-      },
-      {
-        id: "3",
-        content: "Claro, aqui estão os links dos meus últimos 5 vídeos.",
-        sender: "user",
-        timestamp: "2023-06-18T13:30:00",
-        isRead: true,
-      },
-      {
-        id: "4",
-        content:
-          "Obrigado! Analisei seus vídeos e identifiquei alguns pontos que podem ser melhorados. Preparei um documento com recomendações detalhadas.",
-        sender: "admin",
-        timestamp: "2023-06-20T16:30:00",
-        attachments: [
-          {
-            type: "document",
-            url: "#",
-            name: "analise-tiktok.pdf",
-          },
-        ],
-        isRead: true,
-      },
-      {
-        id: "5",
-        content: "Espero que as recomendações tenham sido úteis. Qualquer dúvida, estou à disposição!",
-        sender: "admin",
-        timestamp: "2023-06-20T16:45:00",
-        isRead: true,
-      },
-    ],
-  },
-]
 
 export function PersonalConsultation() {
   const { toast } = useToast()
-  const [consultations, setConsultations] = useState<Consultation[]>(mockConsultations)
-  const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null)
+  const [consultations, setConsultations] = useState<EnhancedConsultation[]>([])
+  const [activeConsultation, setActiveConsultation] = useState<EnhancedConsultation | null>(null)
   const [newMessage, setNewMessage] = useState("")
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false)
   const [schedulingTopic, setSchedulingTopic] = useState("")
   const [schedulingDate, setSchedulingDate] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const supabase = createClientComponentClient()
+  const userId = "your-user-id" // Replace with actual user ID
+
+  useEffect(() => {
+    const fetchConsultations = async () => {
+      try {
+        const fetchedConsultations = await getConsultationsByUserId(supabase, userId)
+
+        // Fetch messages and calculate unread count for each consultation
+        const enhancedConsultations = await Promise.all(
+          fetchedConsultations.map(async (consultation) => {
+            const messages = await getConsultationMessages(supabase, consultation.id)
+            const unreadCount = messages.filter((msg) => !msg.is_read && msg.sender_id !== userId).length
+            return { ...consultation, messages: messages, unreadCount: unreadCount } as EnhancedConsultation
+          }),
+        )
+
+        setConsultations(enhancedConsultations)
+      } catch (error) {
+        console.error("Error fetching consultations:", error)
+        toast({
+          title: "Erro",
+          description: "Falha ao carregar as consultorias.",
+          variant: "destructive",
+        })
+      }
+    }
+
+    fetchConsultations()
+  }, [supabase, userId, toast])
 
   // Rolar para a última mensagem quando a conversa ativa muda ou novas mensagens são adicionadas
   useEffect(() => {
@@ -231,101 +84,153 @@ export function PersonalConsultation() {
 
   // Marcar mensagens como lidas quando a conversa é aberta
   useEffect(() => {
-    if (activeConsultation) {
-      setConsultations((prev) =>
-        prev.map((consultation) =>
-          consultation.id === activeConsultation.id
-            ? {
-                ...consultation,
-                unreadCount: 0,
-                messages: consultation.messages.map((message) => ({
-                  ...message,
-                  isRead: true,
-                })),
-              }
-            : consultation,
-        ),
-      )
+    const markAsRead = async () => {
+      if (activeConsultation) {
+        try {
+          await markMessagesAsRead(supabase, activeConsultation.id, userId)
+
+          // Update the state to reflect the changes
+          setConsultations((prev) =>
+            prev.map((consultation) =>
+              consultation.id === activeConsultation.id
+                ? {
+                    ...consultation,
+                    unreadCount: 0,
+                    messages: consultation.messages.map((msg) => ({ ...msg, is_read: true })),
+                  }
+                : consultation,
+            ),
+          )
+        } catch (error) {
+          console.error("Error marking messages as read:", error)
+          toast({
+            title: "Erro",
+            description: "Falha ao marcar mensagens como lidas.",
+            variant: "destructive",
+          })
+        }
+      }
     }
-  }, [activeConsultation])
+
+    markAsRead()
+  }, [activeConsultation, supabase, userId, toast])
 
   // Selecionar uma consultoria
-  const selectConsultation = (consultation: Consultation) => {
+  const selectConsultation = (consultation: EnhancedConsultation) => {
     setActiveConsultation(consultation)
   }
 
   // Enviar uma nova mensagem
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!newMessage.trim() && !fileInputRef.current?.files?.length) return
 
     if (activeConsultation) {
-      const newMsg: Message = {
-        id: Date.now().toString(),
-        content: newMessage.trim(),
-        sender: "user",
-        timestamp: new Date().toISOString(),
-        isRead: false,
-      }
+      try {
+        const file = fileInputRef.current?.files?.[0]
+        let attachmentUrl = null
+        let attachmentName = null
 
-      // Adicionar anexos se houver
-      if (fileInputRef.current?.files?.length) {
-        const file = fileInputRef.current.files[0]
-        const isImage = file.type.startsWith("image/")
+        if (file) {
+          const isImage = file.type.startsWith("image/")
+          attachmentName = file.name
 
-        newMsg.attachments = [
-          {
-            type: isImage ? "image" : "document",
-            url: URL.createObjectURL(file),
-            name: file.name,
-          },
-        ]
-      }
+          // Upload the file to Supabase storage
+          const { data, error } = await supabase.storage
+            .from("consultation-attachments")
+            .upload(`${userId}/${activeConsultation.id}/${Date.now()}-${file.name}`, file, {
+              cacheControl: "3600",
+              upsert: false,
+            })
 
-      // Atualizar a consultoria ativa com a nova mensagem
-      const updatedConsultation = {
-        ...activeConsultation,
-        lastMessage: newMessage.trim(),
-        lastMessageTime: new Date().toISOString(),
-        messages: [...activeConsultation.messages, newMsg],
-      }
+          if (error) {
+            throw new Error(`Failed to upload file: ${error.message}`)
+          }
 
-      // Atualizar a lista de consultorias
-      setConsultations((prev) =>
-        prev.map((consultation) => (consultation.id === activeConsultation.id ? updatedConsultation : consultation)),
-      )
-
-      // Atualizar a consultoria ativa
-      setActiveConsultation(updatedConsultation)
-
-      // Limpar o campo de mensagem e o input de arquivo
-      setNewMessage("")
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
-      }
-
-      // Simular resposta do administrador após 2 segundos
-      setTimeout(() => {
-        const adminResponse: Message = {
-          id: Date.now().toString(),
-          content: "Obrigado pela sua mensagem! Vou analisar e responder em breve.",
-          sender: "admin",
-          timestamp: new Date().toISOString(),
-          isRead: true,
+          attachmentUrl = data.path // Store the path, not the full URL
         }
 
-        const updatedWithResponse = {
-          ...updatedConsultation,
-          lastMessage: adminResponse.content,
-          lastMessageTime: adminResponse.timestamp,
-          messages: [...updatedConsultation.messages, adminResponse],
-        }
-
-        setConsultations((prev) =>
-          prev.map((consultation) => (consultation.id === activeConsultation.id ? updatedWithResponse : consultation)),
+        // Create the message in the database
+        const newMsg = await createMessage(
+          supabase,
+          activeConsultation.id,
+          userId,
+          newMessage.trim(),
+          attachmentUrl,
+          attachmentName,
         )
 
-        setActiveConsultation(updatedWithResponse)
-      }, 2000)
+        // Update the local state
+        setConsultations((prev) =>
+          prev.map((consultation) => {
+            if (consultation.id === activeConsultation.id) {
+              const updatedConsultation = {
+                ...consultation,
+                messages: [...consultation.messages, newMsg],
+              }
+              return updatedConsultation
+            }
+            return consultation
+          }),
+        )
+
+        setActiveConsultation((prev) => {
+          if (prev) {
+            return {
+              ...prev,
+              messages: [...prev.messages, newMsg],
+            }
+          }
+          return prev
+        })
+
+        // Clear the input field and file input
+        setNewMessage("")
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ""
+        }
+
+        // Simulate admin response after 2 seconds
+        setTimeout(async () => {
+          const adminResponse = await createMessage(
+            supabase,
+            activeConsultation.id,
+            "admin", // Assuming "admin" is a valid user ID
+            "Obrigado pela sua mensagem! Vou analisar e responder em breve.",
+            null,
+            null,
+          )
+
+          setConsultations((prev) =>
+            prev.map((consultation) => {
+              if (consultation.id === activeConsultation.id) {
+                const updatedConsultation = {
+                  ...consultation,
+                  messages: [...consultation.messages, adminResponse],
+                }
+                return updatedConsultation
+              }
+              return consultation
+            }),
+          )
+
+          setActiveConsultation((prev) => {
+            if (prev) {
+              return {
+                ...prev,
+                messages: [...prev.messages, adminResponse],
+              }
+            }
+            return prev
+          })
+        }, 2000)
+      } catch (error) {
+        console.error("Error sending message:", error)
+        toast({
+          title: "Erro",
+          description: "Falha ao enviar a mensagem.",
+          variant: "destructive",
+        })
+      }
     }
   }
 
@@ -335,7 +240,7 @@ export function PersonalConsultation() {
   }
 
   // Agendar uma nova consultoria
-  const scheduleConsultation = () => {
+  const scheduleConsultation = async () => {
     if (!schedulingTopic.trim() || !schedulingDate) {
       toast({
         title: "Erro",
@@ -345,55 +250,48 @@ export function PersonalConsultation() {
       return
     }
 
-    const newConsultation: Consultation = {
-      id: Date.now().toString(),
-      title: schedulingTopic,
-      status: "scheduled",
-      scheduledDate: new Date(schedulingDate).toISOString(),
-      unreadCount: 0,
-      messages: [
-        {
-          id: "1",
-          content: `Olá! Gostaria de agendar uma consultoria sobre: ${schedulingTopic}`,
-          sender: "user",
-          timestamp: new Date().toISOString(),
-          isRead: true,
-        },
-      ],
+    try {
+      const newConsultation = await createConsultation(supabase, userId, schedulingTopic, new Date(schedulingDate))
+
+      setConsultations((prev) => [...prev, { ...newConsultation, messages: [], unreadCount: 0 }])
+      setIsSchedulingOpen(false)
+      setSchedulingTopic("")
+      setSchedulingDate("")
+
+      toast({
+        title: "Consultoria agendada",
+        description: "Sua consultoria foi agendada com sucesso!",
+      })
+
+      // Simulate admin response after 1 second
+      setTimeout(async () => {
+        const adminResponse = await createMessage(
+          supabase,
+          newConsultation.id,
+          "admin", // Assuming "admin" is a valid user ID
+          `Olá! Recebi seu agendamento para ${new Date(schedulingDate).toLocaleDateString(
+            "pt-BR",
+          )}. Confirmo nossa consultoria sobre "${schedulingTopic}". Estarei disponível no horário marcado.`,
+          null,
+          null,
+        )
+
+        setConsultations((prev) =>
+          prev.map((consultation) =>
+            consultation.id === newConsultation.id
+              ? { ...consultation, messages: [...consultation.messages, adminResponse], unreadCount: 1 }
+              : consultation,
+          ),
+        )
+      }, 1000)
+    } catch (error) {
+      console.error("Error scheduling consultation:", error)
+      toast({
+        title: "Erro",
+        description: "Falha ao agendar a consultoria.",
+        variant: "destructive",
+      })
     }
-
-    setConsultations((prev) => [newConsultation, ...prev])
-    setIsSchedulingOpen(false)
-    setSchedulingTopic("")
-    setSchedulingDate("")
-
-    toast({
-      title: "Consultoria agendada",
-      description: "Sua consultoria foi agendada com sucesso!",
-    })
-
-    // Simular resposta do administrador após 1 segundo
-    setTimeout(() => {
-      const adminResponse: Message = {
-        id: Date.now().toString(),
-        content: `Olá! Recebi seu agendamento para ${new Date(schedulingDate).toLocaleDateString("pt-BR")}. Confirmo nossa consultoria sobre "${schedulingTopic}". Estarei disponível no horário marcado.`,
-        sender: "admin",
-        timestamp: new Date().toISOString(),
-        isRead: false,
-      }
-
-      const updatedConsultation = {
-        ...newConsultation,
-        unreadCount: 1,
-        lastMessage: adminResponse.content,
-        lastMessageTime: adminResponse.timestamp,
-        messages: [...newConsultation.messages, adminResponse],
-      }
-
-      setConsultations((prev) =>
-        prev.map((consultation) => (consultation.id === newConsultation.id ? updatedConsultation : consultation)),
-      )
-    }, 1000)
   }
 
   // Formatar data e hora
@@ -613,47 +511,50 @@ export function PersonalConsultation() {
                 {activeConsultation.messages.map((message) => (
                   <div
                     key={message.id}
-                    className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+                    className={`flex ${message.sender_id === userId ? "justify-end" : "justify-start"}`}
                   >
                     <div
                       className={`max-w-[80%] rounded-lg p-3 ${
-                        message.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                        message.sender_id === userId ? "bg-primary text-primary-foreground" : "bg-muted"
                       }`}
                     >
                       {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
-                      {message.attachments && message.attachments.length > 0 && (
+                      {message.attachment_url && (
                         <div className="mt-2 space-y-2">
-                          {message.attachments.map((attachment, index) => (
-                            <div key={index}>
-                              {attachment.type === "image" ? (
-                                <div className="mt-2">
-                                  <img
-                                    src={attachment.url || "/placeholder.svg"}
-                                    alt={attachment.name}
-                                    className="max-w-full rounded-md max-h-60 object-contain"
-                                  />
-                                  <div className="text-xs mt-1 opacity-70">{attachment.name}</div>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 p-2 bg-background/10 rounded-md">
-                                  <FileText className="h-4 w-4" />
-                                  <span className="text-sm truncate">{attachment.name}</span>
-                                  <Button variant="ghost" size="sm" className="ml-auto h-6 px-2">
-                                    Baixar
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                          <div key={message.id}>
+                            {message.attachment_url.startsWith("image") ? (
+                              <div className="mt-2">
+                                <img
+                                  src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${message.attachment_url}`}
+                                  alt={message.attachment_name}
+                                  className="max-w-full rounded-md max-h-60 object-contain"
+                                />
+                                <div className="text-xs mt-1 opacity-70">{message.attachment_name}</div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 p-2 bg-background/10 rounded-md">
+                                <FileText className="h-4 w-4" />
+                                <span className="text-sm truncate">{message.attachment_name}</span>
+                                <a
+                                  href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${message.attachment_url}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="ml-auto h-6 px-2 text-muted-foreground hover:text-foreground"
+                                >
+                                  Baixar
+                                </a>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                       <div
                         className={`text-xs mt-1 ${
-                          message.sender === "user" ? "text-primary-foreground/70" : "text-muted-foreground"
+                          message.sender_id === userId ? "text-primary-foreground/70" : "text-muted-foreground"
                         }`}
                       >
-                        {formatDateTime(message.timestamp)}
-                        {message.sender === "user" && <span className="ml-2">{message.isRead ? "✓✓" : "✓"}</span>}
+                        {formatDateTime(message.created_at)}
+                        {message.sender_id === userId && <span className="ml-2">{message.is_read ? "✓✓" : "✓"}</span>}
                       </div>
                     </div>
                   </div>

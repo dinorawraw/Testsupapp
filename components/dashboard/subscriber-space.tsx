@@ -11,20 +11,24 @@ import { IdeaBoard } from "@/components/subscriber/idea-board"
 import { InsightsBlog } from "@/components/subscriber/insights-blog"
 import { PersonalConsultation } from "@/components/subscriber/personal-consultation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export function SubscriberSpace() {
   const { toast } = useToast()
   const [subscription, setSubscription] = useState({
-    tier: "loading", // "loading", "free", or "premium"
+    tier: "loading", // "loading", "free", ou "premium"
     isLoading: true,
   })
   const [activeDialog, setActiveDialog] = useState<"ideas" | "insights" | "consultation" | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const supabase = createClientComponentClient()
 
   // Buscar o status da assinatura do usuário
   useEffect(() => {
     async function fetchSubscriptionStatus() {
       try {
+        setError(null)
+
         // Obter o usuário atual
         const {
           data: { user },
@@ -48,7 +52,7 @@ export function SubscriberSpace() {
           .eq("status", "active")
           .single()
 
-        if (subscriptionError) {
+        if (subscriptionError && subscriptionError.code !== "PGRST116") {
           console.error("Erro ao buscar assinatura:", subscriptionError)
           setSubscription({ tier: "free", isLoading: false })
           return
@@ -64,6 +68,7 @@ export function SubscriberSpace() {
         console.log("Status da assinatura:", isPremium ? "premium" : "free")
       } catch (error) {
         console.error("Erro ao verificar assinatura:", error)
+        setError("Não foi possível verificar seu status de assinatura.")
         setSubscription({ tier: "free", isLoading: false })
       }
     }
@@ -81,6 +86,10 @@ export function SubscriberSpace() {
     } else {
       setActiveDialog(feature)
     }
+  }
+
+  const handleUpgrade = () => {
+    window.location.href = "/payment"
   }
 
   if (subscription.isLoading) {
@@ -107,7 +116,33 @@ export function SubscriberSpace() {
   return (
     <>
       <div className="space-y-4">
-        <h2 className="text-xl font-bold text-white">Espaço do Assinante</h2>
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-bold text-white">Espaço do Assinante</h2>
+          {subscription.tier !== "premium" && (
+            <Button
+              onClick={handleUpgrade}
+              variant="default"
+              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+            >
+              Fazer Upgrade para Premium
+            </Button>
+          )}
+        </div>
+
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {subscription.tier !== "premium" && (
+          <Alert className="mb-4 bg-amber-100 text-amber-800 border-amber-200">
+            <AlertDescription>
+              Você está usando uma conta gratuita. Faça upgrade para acessar todos os recursos premium.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-3">
           <Card className={`gradient-border ${subscription.tier !== "premium" ? "opacity-75" : ""}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

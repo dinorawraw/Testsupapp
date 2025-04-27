@@ -17,381 +17,270 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
+import {
+  type Consultation,
+  type ConsultationMessage,
+  createMessage,
+  getAllConsultations,
+  getConsultationMessages,
+  markMessagesAsRead,
+  updateConsultation,
+} from "@/lib/supabase/consultation-service"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
-// Tipo para as mensagens
-interface Message {
-  id: string
-  content: string
-  sender: "user" | "admin"
-  timestamp: string
-  attachments?: {
-    type: "image" | "document"
-    url: string
-    name: string
-  }[]
-  isRead: boolean
-}
-
-// Tipo para as consultorias
-interface Consultation {
-  id: string
-  title: string
-  status: "active" | "scheduled" | "completed"
-  lastMessage?: string
-  lastMessageTime?: string
-  unreadCount: number
-  messages: Message[]
-  scheduledDate?: string
-  user: {
-    id: string
-    name: string
+interface EnhancedConsultation extends Consultation {
+  user?: {
     email: string
-    avatar: string
+    id: string
   }
+  messages: ConsultationMessage[]
+  unreadCount: number
 }
-
-// Dados de exemplo para as consultorias
-const mockConsultations: Consultation[] = [
-  {
-    id: "1",
-    title: "Estratégia de Conteúdo para Instagram",
-    status: "active",
-    lastMessage: "Vamos analisar seus insights e propor uma estratégia personalizada.",
-    lastMessageTime: "2023-06-28T14:30:00",
-    unreadCount: 0,
-    user: {
-      id: "user1",
-      name: "João Silva",
-      email: "joao@example.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-    },
-    messages: [
-      {
-        id: "1",
-        content:
-          "Olá! Gostaria de ajuda para desenvolver uma estratégia de conteúdo para o Instagram. Estou tendo dificuldades para aumentar meu engajamento.",
-        sender: "user",
-        timestamp: "2023-06-28T10:15:00",
-        isRead: true,
-      },
-      {
-        id: "2",
-        content:
-          "Olá! Claro, posso ajudar com isso. Poderia me contar um pouco mais sobre seu perfil? Qual é o seu nicho e público-alvo?",
-        sender: "admin",
-        timestamp: "2023-06-28T10:30:00",
-        isRead: true,
-      },
-      {
-        id: "3",
-        content:
-          "Meu perfil é focado em moda sustentável. Meu público-alvo são mulheres entre 25-35 anos interessadas em consumo consciente. Tenho cerca de 5.000 seguidores, mas o engajamento está baixo ultimamente.",
-        sender: "user",
-        timestamp: "2023-06-28T11:00:00",
-        isRead: true,
-      },
-      {
-        id: "4",
-        content:
-          "Entendi! Vou analisar seu perfil e preparar algumas recomendações. Você poderia compartilhar seus insights do Instagram para que eu possa ver os dados de desempenho?",
-        sender: "admin",
-        timestamp: "2023-06-28T11:15:00",
-        isRead: true,
-      },
-      {
-        id: "5",
-        content: "Claro! Aqui estão os insights dos últimos 30 dias.",
-        sender: "user",
-        timestamp: "2023-06-28T11:30:00",
-        attachments: [
-          {
-            type: "image",
-            url: "/placeholder.svg?height=300&width=400",
-            name: "insights-instagram.jpg",
-          },
-        ],
-        isRead: true,
-      },
-      {
-        id: "6",
-        content:
-          "Obrigado pelos insights! Analisando os dados, percebo que seus Reels têm um desempenho significativamente melhor que as fotos estáticas. Vamos focar em aumentar a frequência desse formato.",
-        sender: "admin",
-        timestamp: "2023-06-28T14:00:00",
-        isRead: true,
-      },
-      {
-        id: "7",
-        content: "Vamos analisar seus insights e propor uma estratégia personalizada.",
-        sender: "admin",
-        timestamp: "2023-06-28T14:30:00",
-        attachments: [
-          {
-            type: "document",
-            url: "#",
-            name: "estrategia-instagram.pdf",
-          },
-        ],
-        isRead: true,
-      },
-    ],
-  },
-  {
-    id: "2",
-    title: "Consultoria de Monetização de Canal",
-    status: "scheduled",
-    scheduledDate: "2023-07-05T15:00:00",
-    unreadCount: 1,
-    user: {
-      id: "user2",
-      name: "Maria Oliveira",
-      email: "maria@example.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-    },
-    messages: [
-      {
-        id: "1",
-        content:
-          "Olá! Gostaria de agendar uma consultoria para discutir estratégias de monetização para meu canal do YouTube.",
-        sender: "user",
-        timestamp: "2023-06-25T09:00:00",
-        isRead: true,
-      },
-      {
-        id: "2",
-        content: "Olá! Ficarei feliz em ajudar. Podemos agendar para a próxima semana. Que tal dia 5 de julho às 15h?",
-        sender: "admin",
-        timestamp: "2023-06-25T09:30:00",
-        isRead: true,
-      },
-      {
-        id: "3",
-        content: "Perfeito! Fica agendado então. Obrigado!",
-        sender: "user",
-        timestamp: "2023-06-25T10:00:00",
-        isRead: false,
-      },
-    ],
-  },
-  {
-    id: "3",
-    title: "Análise de Performance de TikTok",
-    status: "completed",
-    lastMessage: "Espero que as recomendações tenham sido úteis. Qualquer dúvida, estou à disposição!",
-    lastMessageTime: "2023-06-20T16:45:00",
-    unreadCount: 0,
-    user: {
-      id: "user3",
-      name: "Pedro Santos",
-      email: "pedro@example.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-    },
-    messages: [
-      {
-        id: "1",
-        content: "Preciso de ajuda para entender por que meus vídeos no TikTok não estão performando bem.",
-        sender: "user",
-        timestamp: "2023-06-18T13:00:00",
-        isRead: true,
-      },
-      {
-        id: "2",
-        content: "Olá! Vamos analisar juntos. Poderia compartilhar alguns exemplos dos seus vídeos recentes?",
-        sender: "admin",
-        timestamp: "2023-06-18T13:15:00",
-        isRead: true,
-      },
-      {
-        id: "3",
-        content: "Claro, aqui estão os links dos meus últimos 5 vídeos.",
-        sender: "user",
-        timestamp: "2023-06-18T13:30:00",
-        isRead: true,
-      },
-      {
-        id: "4",
-        content:
-          "Obrigado! Analisei seus vídeos e identifiquei alguns pontos que podem ser melhorados. Preparei um documento com recomendações detalhadas.",
-        sender: "admin",
-        timestamp: "2023-06-20T16:30:00",
-        attachments: [
-          {
-            type: "document",
-            url: "#",
-            name: "analise-tiktok.pdf",
-          },
-        ],
-        isRead: true,
-      },
-      {
-        id: "5",
-        content: "Espero que as recomendações tenham sido úteis. Qualquer dúvida, estou à disposição!",
-        sender: "admin",
-        timestamp: "2023-06-20T16:45:00",
-        isRead: true,
-      },
-    ],
-  },
-]
 
 export function ConsultationManagement() {
   const { toast } = useToast()
-  const [consultations, setConsultations] = useState<Consultation[]>(mockConsultations)
-  const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null)
+  const [consultations, setConsultations] = useState<EnhancedConsultation[]>([])
+  const [activeConsultation, setActiveConsultation] = useState<EnhancedConsultation | null>(null)
   const [newMessage, setNewMessage] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "scheduled" | "completed">("all")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClientComponentClient()
 
-  // Rolar para a última mensagem quando a conversa ativa muda ou novas mensagens são adicionadas
+  // Load consultations from database
+  useEffect(() => {
+    async function loadConsultations() {
+      try {
+        setIsLoading(true)
+        const consultationsData = await getAllConsultations()
+
+        const enhancedConsultations: EnhancedConsultation[] = await Promise.all(
+          consultationsData.map(async (consultation) => {
+            // Get messages for each consultation
+            const messages = await getConsultationMessages(consultation.id)
+
+            // Calculate unread messages (admin view - count unread user messages)
+            const unreadCount = messages.filter((m) => m.sender === "user" && !m.is_read).length
+
+            return {
+              ...consultation,
+              messages,
+              unreadCount,
+            }
+          }),
+        )
+
+        setConsultations(enhancedConsultations)
+      } catch (error) {
+        console.error("Error loading consultations:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load consultations. Please try again later.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadConsultations()
+  }, [toast])
+
+  // Scroll to the last message when the active conversation changes or new messages are added
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
     }
   }, [activeConsultation])
 
-  // Marcar mensagens como lidas quando a conversa é aberta
+  // Mark messages as read when the conversation is opened
   useEffect(() => {
-    if (activeConsultation) {
-      setConsultations((prev) =>
-        prev.map((consultation) =>
-          consultation.id === activeConsultation.id
-            ? {
-                ...consultation,
-                unreadCount: 0,
-                messages: consultation.messages.map((message) => ({
-                  ...message,
-                  isRead: true,
-                })),
-              }
-            : consultation,
-        ),
-      )
+    async function markAsRead() {
+      if (activeConsultation) {
+        try {
+          await markMessagesAsRead(activeConsultation.id, "admin")
+
+          setConsultations((prev) =>
+            prev.map((consultation) =>
+              consultation.id === activeConsultation.id
+                ? {
+                    ...consultation,
+                    unreadCount: 0,
+                    messages: consultation.messages.map((message) => ({
+                      ...message,
+                      is_read: message.sender === "user" ? true : message.is_read,
+                    })),
+                  }
+                : consultation,
+            ),
+          )
+
+          setActiveConsultation((prevState) => {
+            if (!prevState) return null
+            return {
+              ...prevState,
+              unreadCount: 0,
+              messages: prevState.messages.map((message) => ({
+                ...message,
+                is_read: message.sender === "user" ? true : message.is_read,
+              })),
+            }
+          })
+        } catch (error) {
+          console.error("Error marking messages as read:", error)
+        }
+      }
     }
+
+    markAsRead()
   }, [activeConsultation])
 
-  // Filtrar consultorias
+  // Filter consultations
   const filteredConsultations = consultations.filter((consultation) => {
-    // Filtrar por status
+    // Filter by status
     if (statusFilter !== "all" && consultation.status !== statusFilter) {
       return false
     }
 
-    // Filtrar por pesquisa
+    // Filter by search
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       return (
         consultation.title.toLowerCase().includes(query) ||
-        consultation.user.name.toLowerCase().includes(query) ||
-        consultation.user.email.toLowerCase().includes(query)
+        (consultation.user?.email && consultation.user.email.toLowerCase().includes(query))
       )
     }
 
     return true
   })
 
-  // Selecionar uma consultoria
-  const selectConsultation = (consultation: Consultation) => {
+  // Select a consultation
+  const selectConsultation = (consultation: EnhancedConsultation) => {
     setActiveConsultation(consultation)
   }
 
-  // Enviar uma nova mensagem
-  const sendMessage = () => {
+  // Send a new message
+  const sendMessage = async () => {
     if (!newMessage.trim() && !fileInputRef.current?.files?.length) return
 
     if (activeConsultation) {
-      const newMsg: Message = {
-        id: Date.now().toString(),
-        content: newMessage.trim(),
-        sender: "admin",
-        timestamp: new Date().toISOString(),
-        isRead: false,
+      try {
+        let attachments
+
+        // Handle attachments if any
+        if (fileInputRef.current?.files?.length) {
+          const file = fileInputRef.current.files[0]
+          const isImage = file.type.startsWith("image/")
+
+          // In a real app, you would upload the file to storage
+          // For now, we'll just create a fake URL
+          attachments = [
+            {
+              type: isImage ? "image" : "document",
+              url: "/placeholder.svg", // In a real app, this would be the uploaded file URL
+              name: file.name,
+            },
+          ]
+        }
+
+        // Create the message in the database
+        const newMsg = await createMessage({
+          consultation_id: activeConsultation.id,
+          content: newMessage.trim(),
+          sender: "admin",
+          is_read: false,
+          attachments,
+        })
+
+        // Update local state
+        const updatedMessages = [...activeConsultation.messages, newMsg]
+
+        const updatedConsultation = {
+          ...activeConsultation,
+          messages: updatedMessages,
+        }
+
+        setConsultations((prev) =>
+          prev.map((consultation) => (consultation.id === activeConsultation.id ? updatedConsultation : consultation)),
+        )
+
+        setActiveConsultation(updatedConsultation)
+
+        // Clear the message input and file input
+        setNewMessage("")
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ""
+        }
+
+        toast({
+          title: "Mensagem enviada",
+          description: "Sua mensagem foi enviada com sucesso.",
+        })
+      } catch (error) {
+        console.error("Error sending message:", error)
+        toast({
+          title: "Erro",
+          description: "Não foi possível enviar a mensagem. Tente novamente mais tarde.",
+          variant: "destructive",
+        })
       }
-
-      // Adicionar anexos se houver
-      if (fileInputRef.current?.files?.length) {
-        const file = fileInputRef.current.files[0]
-        const isImage = file.type.startsWith("image/")
-
-        newMsg.attachments = [
-          {
-            type: isImage ? "image" : "document",
-            url: URL.createObjectURL(file),
-            name: file.name,
-          },
-        ]
-      }
-
-      // Atualizar a consultoria ativa com a nova mensagem
-      const updatedConsultation = {
-        ...activeConsultation,
-        lastMessage: newMessage.trim(),
-        lastMessageTime: new Date().toISOString(),
-        messages: [...activeConsultation.messages, newMsg],
-      }
-
-      // Atualizar a lista de consultorias
-      setConsultations((prev) =>
-        prev.map((consultation) => (consultation.id === activeConsultation.id ? updatedConsultation : consultation)),
-      )
-
-      // Atualizar a consultoria ativa
-      setActiveConsultation(updatedConsultation)
-
-      // Limpar o campo de mensagem e o input de arquivo
-      setNewMessage("")
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
-      }
-
-      toast({
-        title: "Mensagem enviada",
-        description: "Sua mensagem foi enviada com sucesso.",
-      })
     }
   }
 
-  // Marcar consultoria como concluída
-  const markAsCompleted = () => {
+  // Mark consultation as completed
+  const markAsCompleted = async () => {
     if (activeConsultation) {
-      const updatedConsultation = {
-        ...activeConsultation,
-        status: "completed" as const,
+      try {
+        const updatedConsultation = await updateConsultation(activeConsultation.id, {
+          status: "completed",
+        })
+
+        // Update local state
+        setConsultations((prev) =>
+          prev.map((consultation) =>
+            consultation.id === activeConsultation.id ? { ...consultation, status: "completed" } : consultation,
+          ),
+        )
+
+        setActiveConsultation((prevState) => {
+          if (!prevState) return null
+          return { ...prevState, status: "completed" }
+        })
+
+        toast({
+          title: "Consultoria concluída",
+          description: "A consultoria foi marcada como concluída.",
+        })
+      } catch (error) {
+        console.error("Error updating consultation status:", error)
+        toast({
+          title: "Erro",
+          description: "Não foi possível marcar a consultoria como concluída.",
+          variant: "destructive",
+        })
       }
-
-      // Atualizar a lista de consultorias
-      setConsultations((prev) =>
-        prev.map((consultation) => (consultation.id === activeConsultation.id ? updatedConsultation : consultation)),
-      )
-
-      // Atualizar a consultoria ativa
-      setActiveConsultation(updatedConsultation)
-
-      toast({
-        title: "Consultoria concluída",
-        description: "A consultoria foi marcada como concluída.",
-      })
     }
   }
 
-  // Abrir o seletor de arquivos
+  // Open the file selector
   const openFileSelector = () => {
     fileInputRef.current?.click()
   }
 
-  // Formatar data e hora
+  // Format date and time
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
   }
 
-  // Formatar data completa
+  // Format full date
   const formatFullDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString("pt-BR", {
@@ -403,7 +292,7 @@ export function ConsultationManagement() {
     })
   }
 
-  // Contar consultorias não lidas
+  // Count unread consultations
   const unreadCount = consultations.reduce((count, consultation) => count + consultation.unreadCount, 0)
 
   return (
@@ -451,7 +340,11 @@ export function ConsultationManagement() {
               </div>
             </div>
             <div className="flex-grow overflow-y-auto">
-              {filteredConsultations.length === 0 ? (
+              {isLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+                </div>
+              ) : filteredConsultations.length === 0 ? (
                 <div className="p-4 text-center text-muted-foreground">Nenhuma consultoria encontrada.</div>
               ) : (
                 filteredConsultations.map((consultation) => (
@@ -472,10 +365,9 @@ export function ConsultationManagement() {
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <Avatar className="h-5 w-5">
-                        <AvatarImage src={consultation.user.avatar} alt={consultation.user.name} />
-                        <AvatarFallback>{consultation.user.name.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{consultation.user?.email?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
                       </Avatar>
-                      <span className="text-sm">{consultation.user.name}</span>
+                      <span className="text-sm">{consultation.user?.email || "User"}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                       <Badge
@@ -494,16 +386,16 @@ export function ConsultationManagement() {
                             ? "Agendada"
                             : "Concluída"}
                       </Badge>
-                      {consultation.scheduledDate && (
+                      {consultation.scheduled_date && (
                         <span className="flex items-center">
                           <Calendar className="h-3 w-3 mr-1" />
-                          {new Date(consultation.scheduledDate).toLocaleDateString()}
+                          {new Date(consultation.scheduled_date).toLocaleDateString()}
                         </span>
                       )}
-                      {consultation.lastMessageTime && (
+                      {consultation.messages.length > 0 && (
                         <span className="flex items-center">
                           <Clock className="h-3 w-3 mr-1" />
-                          {formatDateTime(consultation.lastMessageTime)}
+                          {formatDateTime(consultation.messages[consultation.messages.length - 1].timestamp)}
                         </span>
                       )}
                     </div>
@@ -523,7 +415,7 @@ export function ConsultationManagement() {
                       <div className="font-medium">{activeConsultation.title}</div>
                       <div className="flex items-center text-sm text-muted-foreground">
                         <User className="h-3 w-3 mr-1" />
-                        {activeConsultation.user.name} ({activeConsultation.user.email})
+                        {activeConsultation.user?.email || "User"} ({activeConsultation.user_id})
                       </div>
                     </div>
                   </div>
@@ -552,60 +444,67 @@ export function ConsultationManagement() {
                   </div>
                 </div>
                 <div className="flex-grow overflow-y-auto p-4 space-y-4">
-                  {activeConsultation.messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.sender === "admin" ? "justify-end" : "justify-start"}`}
-                    >
-                      {message.sender === "user" && (
-                        <Avatar className="h-8 w-8 mr-2 mt-1">
-                          <AvatarImage src={activeConsultation.user.avatar} alt={activeConsultation.user.name} />
-                          <AvatarFallback>{activeConsultation.user.name.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                      )}
+                  {activeConsultation.messages.length === 0 ? (
+                    <div className="text-center text-muted-foreground">
+                      Nenhuma mensagem nesta consultoria. Envie uma mensagem para iniciar a conversa.
+                    </div>
+                  ) : (
+                    activeConsultation.messages.map((message) => (
                       <div
-                        className={`max-w-[80%] rounded-lg p-3 ${
-                          message.sender === "admin" ? "bg-primary text-primary-foreground" : "bg-muted"
-                        }`}
+                        key={message.id}
+                        className={`flex ${message.sender === "admin" ? "justify-end" : "justify-start"}`}
                       >
-                        {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
-                        {message.attachments && message.attachments.length > 0 && (
-                          <div className="mt-2 space-y-2">
-                            {message.attachments.map((attachment, index) => (
-                              <div key={index}>
-                                {attachment.type === "image" ? (
-                                  <div className="mt-2">
-                                    <img
-                                      src={attachment.url || "/placeholder.svg"}
-                                      alt={attachment.name}
-                                      className="max-w-full rounded-md max-h-60 object-contain"
-                                    />
-                                    <div className="text-xs mt-1 opacity-70">{attachment.name}</div>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2 p-2 bg-background/10 rounded-md">
-                                    <FileText className="h-4 w-4" />
-                                    <span className="text-sm truncate">{attachment.name}</span>
-                                    <Button variant="ghost" size="sm" className="ml-auto h-6 px-2">
-                                      Baixar
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                        {message.sender === "user" && (
+                          <Avatar className="h-8 w-8 mr-2 mt-1">
+                            <AvatarFallback>
+                              {activeConsultation.user?.email?.charAt(0).toUpperCase() || "U"}
+                            </AvatarFallback>
+                          </Avatar>
                         )}
                         <div
-                          className={`text-xs mt-1 ${
-                            message.sender === "admin" ? "text-primary-foreground/70" : "text-muted-foreground"
+                          className={`max-w-[80%] rounded-lg p-3 ${
+                            message.sender === "admin" ? "bg-primary text-primary-foreground" : "bg-muted"
                           }`}
                         >
-                          {formatDateTime(message.timestamp)}
-                          {message.sender === "admin" && <span className="ml-2">{message.isRead ? "✓✓" : "✓"}</span>}
+                          {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
+                          {message.attachments && message.attachments.length > 0 && (
+                            <div className="mt-2 space-y-2">
+                              {message.attachments.map((attachment, index) => (
+                                <div key={index}>
+                                  {attachment.type === "image" ? (
+                                    <div className="mt-2">
+                                      <img
+                                        src={attachment.url || "/placeholder.svg"}
+                                        alt={attachment.name}
+                                        className="max-w-full rounded-md max-h-60 object-contain"
+                                      />
+                                      <div className="text-xs mt-1 opacity-70">{attachment.name}</div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2 p-2 bg-background/10 rounded-md">
+                                      <FileText className="h-4 w-4" />
+                                      <span className="text-sm truncate">{attachment.name}</span>
+                                      <Button variant="ghost" size="sm" className="ml-auto h-6 px-2">
+                                        Baixar
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div
+                            className={`text-xs mt-1 ${
+                              message.sender === "admin" ? "text-primary-foreground/70" : "text-muted-foreground"
+                            }`}
+                          >
+                            {formatDateTime(message.timestamp)}
+                            {message.sender === "admin" && <span className="ml-2">{message.is_read ? "✓✓" : "✓"}</span>}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                   <div ref={messagesEndRef} />
                 </div>
                 {activeConsultation.status !== "completed" && (

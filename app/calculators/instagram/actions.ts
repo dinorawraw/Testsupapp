@@ -1,54 +1,88 @@
 "use server"
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { createUniversalClient } from "@/lib/supabase/universal-client"
 import { revalidatePath } from "next/cache"
 
-export async function saveInstagramCalculation(formData: FormData) {
-  try {
-    const supabase = createClientComponentClient()
+interface InstagramCalculationData {
+  name: string
+  platform: string
+  followers: number
+  engagement: number
+  likes: number
+  comments: number
+  content_type: string
+  has_discount: boolean
+  estimated_value: number
+}
 
-    // Obter a sessão atual
-    const { data: sessionData } = await supabase.auth.getSession()
-    if (!sessionData.session) {
+export async function saveInstagramCalculation(data: InstagramCalculationData) {
+  try {
+    const supabase = createUniversalClient()
+
+    // Get the current user
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
       return { success: false, error: "Usuário não autenticado" }
     }
 
-    const userId = sessionData.session.user.id
-
-    // Extrair dados do FormData
-    const followers = formData.get("followers") ? Number(formData.get("followers")) : 0
-    const engagement = formData.get("engagement") ? Number(formData.get("engagement")) : 0
-    const valuePerPost = formData.get("valuePerPost") ? Number(formData.get("valuePerPost")) : 0
-    const valuePerStory = formData.get("valuePerStory") ? Number(formData.get("valuePerStory")) : 0
-    const valuePerReel = formData.get("valuePerReel") ? Number(formData.get("valuePerReel")) : 0
-
-    // Inserir na tabela de cálculos
-    const { data, error } = await supabase.from("calculations").insert([
-      {
-        user_id: userId,
-        platform: "instagram",
-        data: {
-          followers,
-          engagement,
-          valuePerPost,
-          valuePerStory,
-          valuePerReel,
+    // Save the calculation to the database
+    const { data: savedData, error } = await supabase
+      .from("calculations")
+      .insert([
+        {
+          user_id: user.id,
+          platform: data.platform,
+          name: data.name,
+          followers: data.followers,
+          engagement: data.engagement,
+          likes: data.likes,
+          comments: data.comments,
+          content_type: data.content_type,
+          has_discount: data.has_discount,
+          estimated_value: data.estimated_value,
         },
-        created_at: new Date().toISOString(),
-      },
-    ])
+      ])
+      .select()
 
     if (error) {
       console.error("Erro ao salvar cálculo:", error)
       return { success: false, error: error.message }
     }
 
-    // Revalidar o caminho para atualizar os dados
+    // Also save to the saved_calculations table for history
+    const { error: savedError } = await supabase.from("saved_calculations").insert([
+      {
+        user_id: user.id,
+        platform: data.platform,
+        name: data.name,
+        data: {
+          followers: data.followers,
+          engagement: data.engagement,
+          likes: data.likes,
+          comments: data.comments,
+          content_type: data.content_type,
+          has_discount: data.has_discount,
+        },
+        result: data.estimated_value,
+      },
+    ])
+
+    if (savedError) {
+      console.error("Erro ao salvar no histórico:", savedError)
+      // Continue even if there's an error with the history
+    }
+
+    // Revalidate the path to update the UI
+    revalidatePath("/calculators/instagram")
     revalidatePath("/dashboard")
 
-    return { success: true }
+    return { success: true, data: savedData }
   } catch (error: any) {
-    console.error("Erro ao processar solicitação:", error)
+    console.error("Erro ao processar cálculo:", error)
     return { success: false, error: error.message || "Erro desconhecido" }
   }
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -23,51 +23,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { type Idea, createIdea, deleteIdea, getAllIdeas, updateIdea } from "@/lib/supabase/idea-service"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
-// Tipo para as ideias
-interface Idea {
-  id: string
-  title: string
-  description: string
-  tags: string[]
-  color: string
-  createdAt: string
-  createdBy: string
-}
-
-// Dados de exemplo para as ideias
-const mockIdeas: Idea[] = [
-  {
-    id: "1",
-    title: "Série de vídeos sobre tendências de moda",
-    description: "Criar uma série semanal explorando as últimas tendências de moda e como incorporá-las no dia a dia.",
-    tags: ["moda", "tendências", "série", "semanal"],
-    color: "bg-pink-100 dark:bg-pink-900",
-    createdAt: "2023-06-15",
-    createdBy: "Admin",
-  },
-  {
-    id: "2",
-    title: "Tutorial de maquiagem para iniciantes",
-    description: "Um guia passo a passo para iniciantes aprenderem técnicas básicas de maquiagem.",
-    tags: ["beleza", "tutorial", "maquiagem", "iniciantes"],
-    color: "bg-purple-100 dark:bg-purple-900",
-    createdAt: "2023-06-18",
-    createdBy: "Admin",
-  },
-  {
-    id: "3",
-    title: "Desafio de 30 dias de fitness",
-    description:
-      "Criar um desafio de 30 dias com diferentes exercícios para engajar seguidores interessados em fitness.",
-    tags: ["fitness", "desafio", "saúde", "engajamento"],
-    color: "bg-blue-100 dark:bg-blue-900",
-    createdAt: "2023-06-20",
-    createdBy: "Admin",
-  },
-]
-
-// Esquema para o formulário de ideias
+// Schema for idea form
 const ideaFormSchema = z.object({
   title: z.string().min(5, {
     message: "O título deve ter pelo menos 5 caracteres.",
@@ -80,14 +39,38 @@ const ideaFormSchema = z.object({
 
 export function IdeaManagement() {
   const { toast } = useToast()
-  const [ideas, setIdeas] = useState<Idea[]>(mockIdeas)
+  const [ideas, setIdeas] = useState<Idea[]>([])
   const [editingIdea, setEditingIdea] = useState<Idea | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [currentTags, setCurrentTags] = useState<string[]>([])
   const [newTag, setNewTag] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClientComponentClient()
 
-  // Formulário para criar/editar ideias
+  // Load ideas from database
+  useEffect(() => {
+    async function loadIdeas() {
+      try {
+        setIsLoading(true)
+        const ideasData = await getAllIdeas()
+        setIdeas(ideasData)
+      } catch (error) {
+        console.error("Error loading ideas:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load ideas. Please try again later.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadIdeas()
+  }, [toast])
+
+  // Form to create/edit ideas
   const form = useForm<z.infer<typeof ideaFormSchema>>({
     resolver: zodResolver(ideaFormSchema),
     defaultValues: {
@@ -97,7 +80,7 @@ export function IdeaManagement() {
     },
   })
 
-  // Filtrar ideias com base na pesquisa
+  // Filter ideas based on search
   const filteredIdeas = ideas.filter(
     (idea) =>
       idea.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -105,7 +88,7 @@ export function IdeaManagement() {
       idea.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())),
   )
 
-  // Abrir o diálogo para criar uma nova ideia
+  // Open dialog to create a new idea
   const openCreateDialog = () => {
     setEditingIdea(null)
     setCurrentTags([])
@@ -117,7 +100,7 @@ export function IdeaManagement() {
     setIsDialogOpen(true)
   }
 
-  // Abrir o diálogo para editar uma ideia existente
+  // Open dialog to edit an existing idea
   const openEditDialog = (idea: Idea) => {
     setEditingIdea(idea)
     setCurrentTags([...idea.tags])
@@ -129,7 +112,7 @@ export function IdeaManagement() {
     setIsDialogOpen(true)
   }
 
-  // Adicionar uma nova tag
+  // Add a new tag
   const addTag = () => {
     if (newTag.trim() && !currentTags.includes(newTag.trim())) {
       setCurrentTags((prev) => [...prev, newTag.trim()])
@@ -137,59 +120,88 @@ export function IdeaManagement() {
     }
   }
 
-  // Remover uma tag
+  // Remove a tag
   const removeTag = (tagToRemove: string) => {
     setCurrentTags((prev) => prev.filter((tag) => tag !== tagToRemove))
   }
 
-  // Excluir uma ideia
-  const deleteIdea = (ideaId: string) => {
-    setIdeas((prev) => prev.filter((idea) => idea.id !== ideaId))
-    toast({
-      title: "Ideia excluída",
-      description: "A ideia foi excluída com sucesso.",
-    })
-  }
-
-  // Enviar o formulário
-  function onSubmit(values: z.infer<typeof ideaFormSchema>) {
-    if (editingIdea) {
-      // Atualizar ideia existente
-      setIdeas((prev) =>
-        prev.map((idea) =>
-          idea.id === editingIdea.id
-            ? {
-                ...idea,
-                title: values.title,
-                description: values.description,
-                tags: currentTags,
-                color: values.color,
-              }
-            : idea,
-        ),
-      )
+  // Delete an idea
+  const handleDeleteIdea = async (ideaId: number) => {
+    try {
+      await deleteIdea(ideaId)
+      setIdeas((prev) => prev.filter((idea) => idea.id !== ideaId))
       toast({
-        title: "Ideia atualizada",
-        description: "A ideia foi atualizada com sucesso.",
+        title: "Ideia excluída",
+        description: "A ideia foi excluída com sucesso.",
       })
-    } else {
-      // Criar nova ideia
-      const newIdea: Idea = {
-        id: Date.now().toString(),
-        title: values.title,
-        description: values.description,
-        tags: currentTags,
-        color: values.color,
-        createdAt: new Date().toISOString().split("T")[0],
-        createdBy: "Admin",
-      }
-      setIdeas((prev) => [newIdea, ...prev])
+    } catch (error) {
+      console.error("Error deleting idea:", error)
       toast({
-        title: "Ideia criada",
-        description: "A nova ideia foi criada com sucesso.",
+        title: "Erro",
+        description: "Não foi possível excluir a ideia. Tente novamente mais tarde.",
+        variant: "destructive",
       })
     }
-    setIsDialogOpen(false)
+  }
+
+  // Submit form
+  async function onSubmit(values: z.infer<typeof ideaFormSchema>) {
+    try {
+      // Get the current user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        toast({
+          title: "Erro",
+          description: "Você precisa estar logado para salvar ideias.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (editingIdea) {
+        // Update existing idea
+        const updatedIdea = await updateIdea(editingIdea.id, {
+          title: values.title,
+          description: values.description,
+          tags: currentTags,
+          color: values.color,
+        })
+
+        setIdeas((prev) => prev.map((idea) => (idea.id === editingIdea.id ? updatedIdea : idea)))
+
+        toast({
+          title: "Ideia atualizada",
+          description: "A ideia foi atualizada com sucesso.",
+        })
+      } else {
+        // Create new idea
+        const newIdea = await createIdea({
+          title: values.title,
+          description: values.description,
+          tags: currentTags,
+          color: values.color,
+          created_by: user.id,
+        })
+
+        setIdeas((prev) => [newIdea, ...prev])
+
+        toast({
+          title: "Ideia criada",
+          description: "A nova ideia foi criada com sucesso.",
+        })
+      }
+      setIsDialogOpen(false)
+    } catch (error) {
+      console.error("Error saving idea:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar a ideia. Tente novamente mais tarde.",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
@@ -326,7 +338,11 @@ export function IdeaManagement() {
           />
         </div>
         <div className="space-y-4">
-          {filteredIdeas.length === 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+            </div>
+          ) : filteredIdeas.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
               <h3 className="mt-4 text-lg font-semibold">Nenhuma ideia encontrada</h3>
               <p className="mb-4 mt-2 text-sm text-muted-foreground">
@@ -347,13 +363,13 @@ export function IdeaManagement() {
                       <Button variant="ghost" size="icon" onClick={() => openEditDialog(idea)}>
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => deleteIdea(idea.id)}>
+                      <Button variant="ghost" size="icon" onClick={() => handleDeleteIdea(idea.id)}>
                         <Trash className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
                   <CardDescription className="text-foreground/70">
-                    Criado em {new Date(idea.createdAt).toLocaleDateString("pt-BR")} por {idea.createdBy}
+                    Criado em {new Date(idea.created_at).toLocaleDateString("pt-BR")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

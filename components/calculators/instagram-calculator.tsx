@@ -1,330 +1,239 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { useToast } from "@/hooks/use-toast"
-import { saveInstagramCalculation, getInstagramCalculationHistory } from "@/app/calculators/instagram/actions"
-import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { ArrowLeft, Save } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
+import { saveInstagramCalculation } from "@/app/calculators/instagram/actions"
 import { useRouter } from "next/navigation"
 
 const formSchema = z.object({
-  followers: z.string().regex(/^\d+$/, {
-    message: "Please enter a valid number of followers.",
+  name: z.string().min(1, { message: "Nome é obrigatório" }),
+  followers: z.coerce.number().min(1, { message: "Número de seguidores é obrigatório" }),
+  engagement: z.coerce.number().min(0, { message: "Taxa de engajamento deve ser positiva" }).optional(),
+  likes: z.coerce.number().min(0, { message: "Número de likes deve ser positivo" }).optional(),
+  comments: z.coerce.number().min(0, { message: "Número de comentários deve ser positivo" }).optional(),
+  contentType: z.enum(["post", "story", "reels", "carousel"], {
+    required_error: "Selecione o tipo de conteúdo",
   }),
-  scope: z.enum(["small", "large"]),
-  minReach: z.string().regex(/^\d+$/, {
-    message: "Please enter a valid percentage.",
-  }),
-  maxReach: z.string().regex(/^\d+$/, {
-    message: "Please enter a valid percentage.",
-  }),
-  engagement: z.string().regex(/^\d+$/, {
-    message: "Please enter a valid percentage.",
-  }),
-  licenseDays: z.string().regex(/^\d+$/, {
-    message: "Please enter a valid number of days.",
-  }),
-  hasDiscount: z.enum(["yes", "no"]),
+  hasDiscount: z.boolean().default(false),
 })
-
-type CalculationHistory = {
-  id: string
-  name: string
-  followers: number
-  scope?: string
-  minReach?: number
-  maxReach?: number
-  engagement?: number
-  licenseDays?: number
-  estimated_value: number
-  created_at: string
-}
 
 export function InstagramCalculator() {
   const { toast } = useToast()
   const router = useRouter()
-  const [result, setResult] = useState<number | null>(null)
-  const [reelsValue, setReelsValue] = useState<number | null>(null)
-  const [showSaveDialog, setShowSaveDialog] = useState(false)
-  const [saveName, setSaveName] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
-  const [history, setHistory] = useState<CalculationHistory[]>([])
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser()
-      if (data.user) {
-        setUserId(data.user.id)
-        loadHistory(data.user.id)
-      }
-    }
-
-    checkUser()
-  }, [])
-
-  const loadHistory = async (uid: string) => {
-    const result = await getInstagramCalculationHistory(uid)
-    if (result.success && result.data) {
-      setHistory(result.data as CalculationHistory[])
-    }
-  }
+  const [calculatedValue, setCalculatedValue] = useState<number | null>(null)
+  const [isCalculating, setIsCalculating] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      followers: "",
-      scope: "small",
-      minReach: "5",
-      maxReach: "50",
-      engagement: "0",
-      licenseDays: "1",
-      hasDiscount: "no",
+      name: "",
+      followers: 0,
+      engagement: 0,
+      likes: 0,
+      comments: 0,
+      contentType: "post",
+      hasDiscount: false,
     },
   })
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // Convert string values to numbers
-    const followers = Number.parseInt(values.followers)
-    const minReach = Number.parseInt(values.minReach)
-    const maxReach = Number.parseInt(values.maxReach)
-    const engagement = Number.parseInt(values.engagement)
-    const licenseDays = Number.parseInt(values.licenseDays)
-    const scope = values.scope
-    const hasDiscount = values.hasDiscount
+  const calculateValue = (data: z.infer<typeof formSchema>) => {
+    // Base value calculation
+    let baseValue = 0
 
-    // Calculate base value
-    const ratePerFollower = scope === "small" ? 0.014 : 0.008
-    const baseValue = followers * ratePerFollower
-
-    // Calculate min reach value
-    const minReachValue = (followers * (minReach / 100) * 8) / 1000
-
-    // Calculate max reach value
-    const maxReachValue = (followers * (maxReach / 100) * 10) / 1000
-
-    // Calculate license value
-    const baseRate = 13.32
-    const followersInUnits = followers / 50000
-    const licenseValue = baseRate * followersInUnits * licenseDays
-
-    // Calculate total value
-    const totalValue = baseValue + minReachValue + maxReachValue + licenseValue
-
-    // Apply discount if needed
-    const finalValue = hasDiscount === "yes" ? totalValue * 0.9 : totalValue
-    const finalReelsValue = hasDiscount === "yes" ? totalValue * 2 * 0.9 : totalValue * 2
-
-    setResult(finalValue)
-    setReelsValue(finalReelsValue)
-
-    toast({
-      title: "Calculation complete",
-      description: "Your calculation has been processed.",
-    })
-  }
-
-  const showSavePrompt = () => {
-    setShowSaveDialog(true)
-    setSaveName("")
-  }
-
-  const cancelSave = () => {
-    setShowSaveDialog(false)
-    setSaveName("")
-  }
-
-  const saveCalculation = async () => {
-    if (!saveName.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a name for this calculation",
-        variant: "destructive",
-      })
-      return
+    // Calculate based on followers
+    if (data.followers < 10000) {
+      baseValue = data.followers * 0.01
+    } else if (data.followers < 100000) {
+      baseValue = data.followers * 0.02
+    } else if (data.followers < 500000) {
+      baseValue = data.followers * 0.03
+    } else if (data.followers < 1000000) {
+      baseValue = data.followers * 0.05
+    } else {
+      baseValue = data.followers * 0.1
     }
 
-    if (!userId || !result) {
-      toast({
-        title: "Error",
-        description: "You need to be logged in to save calculations",
-        variant: "destructive",
-      })
-      return
+    // Adjust based on engagement rate
+    let engagementRate = data.engagement
+    if (!engagementRate && data.likes && data.followers > 0) {
+      engagementRate = (data.likes / data.followers) * 100
     }
 
-    setLoading(true)
+    if (engagementRate) {
+      if (engagementRate > 10) {
+        baseValue *= 1.5
+      } else if (engagementRate > 5) {
+        baseValue *= 1.3
+      } else if (engagementRate > 3) {
+        baseValue *= 1.1
+      } else if (engagementRate < 1) {
+        baseValue *= 0.8
+      }
+    }
+
+    // Adjust based on content type
+    switch (data.contentType) {
+      case "story":
+        baseValue *= 0.7
+        break
+      case "reels":
+        baseValue *= 1.5
+        break
+      case "carousel":
+        baseValue *= 1.2
+        break
+      default:
+        break
+    }
+
+    // Apply discount if applicable
+    if (data.hasDiscount) {
+      baseValue *= 0.9
+    }
+
+    return Math.round(baseValue * 100) / 100
+  }
+
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    setIsCalculating(true)
 
     try {
-      const values = form.getValues()
+      const value = calculateValue(data)
+      setCalculatedValue(value)
 
-      // Create FormData to send to the server
-      const formData = new FormData()
-      formData.append("name", saveName)
-      formData.append("followers", values.followers)
-      formData.append("scope", values.scope)
-      formData.append("minReach", values.minReach)
-      formData.append("maxReach", values.maxReach)
-      formData.append("engagement", values.engagement)
-      formData.append("licenseDays", values.licenseDays)
-      formData.append("hasDiscount", values.hasDiscount)
-
-      const response = await saveInstagramCalculation(formData)
-
-      if (response.success) {
-        setShowSaveDialog(false)
-        setLastSavedAt(new Date().toLocaleTimeString())
-        toast({
-          title: "Calculation saved",
-          description: "Your calculation has been saved successfully.",
-        })
-
-        // Reload history
-        if (userId) {
-          loadHistory(userId)
-        }
-      } else {
-        throw new Error(response.error || "Error saving calculation")
-      }
-    } catch (error) {
-      console.error("Error saving calculation", error)
       toast({
-        title: "Error",
-        description: "Failed to save calculation. Please try again.",
+        title: "Cálculo realizado",
+        description: `O valor estimado é R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+      })
+    } catch (error) {
+      toast({
+        title: "Erro ao calcular",
+        description: "Ocorreu um erro ao processar o cálculo.",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsCalculating(false)
     }
   }
 
-  const toggleHistory = () => {
-    setShowHistory(!showHistory)
+  const handleSave = async () => {
+    if (calculatedValue === null) return
+
+    setIsSaving(true)
+
+    try {
+      const formData = form.getValues()
+      const result = await saveInstagramCalculation({
+        name: formData.name,
+        platform: "instagram",
+        followers: formData.followers,
+        engagement: formData.engagement || 0,
+        likes: formData.likes || 0,
+        comments: formData.comments || 0,
+        content_type: formData.contentType,
+        has_discount: formData.hasDiscount,
+        estimated_value: calculatedValue,
+      })
+
+      if (result.success) {
+        toast({
+          title: "Cálculo salvo",
+          description: "O cálculo foi salvo com sucesso.",
+        })
+
+        // Refresh the page to show updated history
+        router.refresh()
+      } else {
+        throw new Error(result.error || "Erro ao salvar cálculo")
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro ao salvar",
+        description: error.message || "Ocorreu um erro ao salvar o cálculo.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="mb-4">
-        <Button variant="outline" size="sm" onClick={() => router.back()} className="mb-4">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back
-        </Button>
-      </div>
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Calculadora de Valor para Instagram</CardTitle>
+        <CardDescription>
+          Calcule o valor estimado para campanhas no Instagram com base nos dados do influenciador.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome da Campanha</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: Campanha Verão 2023" {...field} />
+                  </FormControl>
+                  <FormDescription>Um nome para identificar este cálculo</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-      <Card>
-        <CardContent className="pt-6">
-          <h2 className="text-2xl font-bold mb-6">Instagram Calculator</h2>
-
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="followers"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Number of Followers</FormLabel>
+                    <FormLabel>Número de Seguidores</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. 10000" {...field} />
+                      <Input type="number" min="0" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
-              <FormField
-                control={form.control}
-                name="scope"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>Scope</FormLabel>
-                    <FormControl>
-                      <RadioGroup
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        className="flex flex-col space-y-1"
-                      >
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl>
-                            <RadioGroupItem value="small" />
-                          </FormControl>
-                          <FormLabel className="font-normal">Small (Local/Regional)</FormLabel>
-                        </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl>
-                            <RadioGroupItem value="large" />
-                          </FormControl>
-                          <FormLabel className="font-normal">Large (National/International)</FormLabel>
-                        </FormItem>
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="minReach"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Minimum Reach (%)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. 5" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="maxReach"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Maximum Reach (%)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. 50" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
 
               <FormField
                 control={form.control}
                 name="engagement"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Engagement Rate (%)</FormLabel>
+                    <FormLabel>Taxa de Engajamento (%)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. 3" {...field} />
+                      <Input type="number" min="0" step="0.01" {...field} />
                     </FormControl>
+                    <FormDescription>Opcional: média de engajamento em porcentagem</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+            </div>
 
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <FormField
                 control={form.control}
-                name="licenseDays"
+                name="likes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>License Duration (days)</FormLabel>
+                    <FormLabel>Média de Likes</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. 30" {...field} />
+                      <Input type="number" min="0" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -333,125 +242,84 @@ export function InstagramCalculator() {
 
               <FormField
                 control={form.control}
-                name="hasDiscount"
+                name="comments"
                 render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>Apply Discount?</FormLabel>
+                  <FormItem>
+                    <FormLabel>Média de Comentários</FormLabel>
                     <FormControl>
-                      <RadioGroup
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        className="flex flex-col space-y-1"
-                      >
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl>
-                            <RadioGroupItem value="yes" />
-                          </FormControl>
-                          <FormLabel className="font-normal">Yes (10% discount)</FormLabel>
-                        </FormItem>
-                        <FormItem className="flex items-center space-x-3 space-y-0">
-                          <FormControl>
-                            <RadioGroupItem value="no" />
-                          </FormControl>
-                          <FormLabel className="font-normal">No</FormLabel>
-                        </FormItem>
-                      </RadioGroup>
+                      <Input type="number" min="0" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
-              <Button type="submit" className="w-full">
-                Calculate
-              </Button>
-            </form>
-          </Form>
-
-          {result !== null && (
-            <div className="mt-8 p-4 border rounded-md bg-muted">
-              <h3 className="text-xl font-semibold mb-2">Results</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Feed Post Value:</p>
-                  <p className="text-2xl font-bold">${result.toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Reels Value:</p>
-                  <p className="text-2xl font-bold">${reelsValue?.toFixed(2)}</p>
-                </div>
-              </div>
-
-              <div className="mt-4 flex justify-between items-center">
-                <Button onClick={showSavePrompt} disabled={loading}>
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Calculation
-                </Button>
-
-                {lastSavedAt && <p className="text-sm text-muted-foreground">Last saved at: {lastSavedAt}</p>}
-              </div>
             </div>
-          )}
 
-          {userId && (
-            <div className="mt-6">
-              <Button variant="outline" onClick={toggleHistory} className="w-full">
-                {showHistory ? "Hide History" : "Show Calculation History"}
-              </Button>
-
-              {showHistory && (
-                <div className="mt-4">
-                  <h3 className="text-xl font-semibold mb-2">Your Saved Calculations</h3>
-                  {history.length > 0 ? (
-                    <div className="space-y-2">
-                      {history.map((item) => (
-                        <div key={item.id} className="p-3 border rounded-md">
-                          <div className="flex justify-between">
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(item.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <p className="text-sm">Followers: {item.followers.toLocaleString()}</p>
-                          <p className="font-semibold mt-1">Value: ${item.estimated_value.toFixed(2)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">No saved calculations yet.</p>
-                  )}
-                </div>
+            <FormField
+              control={form.control}
+              name="contentType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tipo de Conteúdo</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo de conteúdo" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="post">Post no Feed</SelectItem>
+                      <SelectItem value="story">Story</SelectItem>
+                      <SelectItem value="reels">Reels</SelectItem>
+                      <SelectItem value="carousel">Carrossel</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Save Calculation</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="save-name">Name for this calculation</Label>
-            <Input
-              id="save-name"
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              placeholder="e.g. Client A Campaign"
-              className="mt-2"
             />
+
+            <FormField
+              control={form.control}
+              name="hasDiscount"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Desconto para Agência</FormLabel>
+                    <FormDescription>Aplicar desconto de 10% para agências</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <Button type="submit" className="w-full" disabled={isCalculating}>
+              {isCalculating ? "Calculando..." : "Calcular Valor"}
+            </Button>
+          </form>
+        </Form>
+
+        {calculatedValue !== null && (
+          <div className="mt-6">
+            <Separator className="my-4" />
+            <div className="rounded-lg bg-muted p-4">
+              <h3 className="mb-2 text-lg font-medium">Resultado do Cálculo</h3>
+              <p className="text-3xl font-bold text-primary">
+                R$ {calculatedValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Este é o valor estimado para a campanha com base nos dados fornecidos.
+              </p>
+            </div>
+
+            <Button onClick={handleSave} className="mt-4 w-full" variant="outline" disabled={isSaving}>
+              {isSaving ? "Salvando..." : "Salvar Cálculo"}
+            </Button>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={cancelSave} disabled={loading}>
-              Cancel
-            </Button>
-            <Button onClick={saveCalculation} disabled={loading}>
-              {loading ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

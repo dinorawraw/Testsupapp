@@ -1,7 +1,5 @@
 "use client"
 
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
-
 import { useState, useEffect } from "react"
 import { MoreHorizontal, Pencil, Trash, UserPlus, Shield, User } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
@@ -14,6 +12,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuLabel,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -92,14 +91,14 @@ export function UserManagement() {
 
     try {
       // Get users from auth.users
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
+      const { data: authData, error: authError } = await supabase.auth.admin.listUsers()
 
       if (authError) throw new Error(authError.message)
 
       const enhancedUsers: UserWithProfile[] = []
 
       // For each user, get their profile info
-      for (const user of authUsers.users) {
+      for (const user of authData.users) {
         // Get profile data
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")

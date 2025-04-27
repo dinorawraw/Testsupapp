@@ -6,8 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Trash2 } from "lucide-react"
-import { supabase } from "@/lib/supabase/database"
+import { Trash2, Download } from "lucide-react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { useToast } from "@/hooks/use-toast"
 
 interface Calculation {
   id: string
@@ -35,11 +36,14 @@ interface SavedCalculation {
 }
 
 export function CalculationHistory() {
+  const { toast } = useToast()
   const [calculations, setCalculations] = useState<Calculation[]>([])
   const [savedCalculations, setSavedCalculations] = useState<SavedCalculation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("all")
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null)
+  const supabase = createClientComponentClient()
 
   useEffect(() => {
     async function fetchCalculations() {
@@ -121,6 +125,7 @@ export function CalculationHistory() {
   // Função para excluir um cálculo
   const deleteCalculation = async (id: string, isNewTable = false) => {
     try {
+      setDeleteLoading(id)
       const table = isNewTable ? "saved_calculations" : "calculations"
       const { error } = await supabase.from(table).delete().eq("id", id)
 
@@ -131,12 +136,27 @@ export function CalculationHistory() {
       // Atualizar estado após exclusão
       if (isNewTable) {
         setSavedCalculations((prev) => prev.filter((calc) => calc.id !== id))
+        toast({
+          title: "Cálculo excluído",
+          description: "O cálculo foi excluído com sucesso.",
+        })
       } else {
         setCalculations((prev) => prev.filter((calc) => calc.id !== id))
+        toast({
+          title: "Cálculo excluído",
+          description: "O cálculo foi excluído com sucesso.",
+        })
       }
     } catch (err) {
       console.error("Erro ao excluir cálculo:", err)
       setError("Erro ao excluir cálculo")
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir o cálculo.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeleteLoading(null)
     }
   }
 
@@ -159,15 +179,100 @@ export function CalculationHistory() {
       education: "Educação",
       gaming: "Gaming",
       lifestyle: "Lifestyle",
+      post: "Post",
+      story: "Story",
+      reels: "Reels",
+      video: "Vídeo",
     }
     return contentTypes[contentType] || contentType
   }
 
+  // Função para exportar os cálculos como CSV
+  const exportCalculations = () => {
+    try {
+      // Criar conteúdo CSV
+      const headers = ["Nome", "Plataforma", "Métricas", "Valor Estimado", "Data"]
+
+      // Função para formatar métricas
+      const formatMetrics = (calc: any) => {
+        if ("data" in calc) {
+          // Para saved_calculations
+          return Object.entries(calc.data)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join("; ")
+        } else {
+          // Para calculations
+          const metrics = []
+          if (calc.followers) metrics.push(`Seguidores: ${calc.followers}`)
+          if (calc.subscribers) metrics.push(`Inscritos: ${calc.subscribers}`)
+          if (calc.views) metrics.push(`Visualizações: ${calc.views}`)
+          if (calc.engagement) metrics.push(`Engajamento: ${calc.engagement}%`)
+          if (calc.content_type) metrics.push(`Tipo: ${getContentTypeName(calc.content_type)}`)
+          return metrics.join("; ")
+        }
+      }
+
+      // Combinar cálculos de ambas as tabelas
+      const allCalculations = [
+        ...calculations.map((calc) => ({
+          name: calc.name || "Sem nome",
+          platform: getPlatformName(calc.platform),
+          metrics: formatMetrics(calc),
+          value: calc.estimated_value,
+          date: formatDate(calc.created_at),
+        })),
+        ...savedCalculations.map((calc) => ({
+          name: calc.name || "Sem nome",
+          platform: getPlatformName(calc.platform),
+          metrics: formatMetrics(calc),
+          value: calc.result,
+          date: formatDate(calc.created_at),
+        })),
+      ]
+
+      const csvContent = [
+        headers.join(","),
+        ...allCalculations.map((calc) => {
+          return [`"${calc.name}"`, calc.platform, `"${calc.metrics}"`, calc.value, calc.date].join(",")
+        }),
+      ].join("\n")
+
+      // Criar link de download
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.setAttribute("href", url)
+      link.setAttribute("download", `calculos-${new Date().toISOString().split("T")[0]}.csv`)
+      link.style.visibility = "hidden"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      toast({
+        title: "Exportação concluída",
+        description: "Os cálculos foram exportados com sucesso.",
+      })
+    } catch (error) {
+      console.error("Erro ao exportar cálculos:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível exportar os cálculos.",
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Histórico de Cálculos</CardTitle>
-        <CardDescription>Visualize todos os seus cálculos anteriores.</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle>Histórico de Cálculos</CardTitle>
+          <CardDescription>Visualize todos os seus cálculos anteriores.</CardDescription>
+        </div>
+        <Button onClick={exportCalculations} className="flex items-center gap-2">
+          <Download className="h-4 w-4" />
+          Exportar CSV
+        </Button>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
@@ -249,6 +354,7 @@ export function CalculationHistory() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => deleteCalculation(calc.id)}
+                                  disabled={deleteLoading === calc.id}
                                   title="Excluir cálculo"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -306,6 +412,7 @@ export function CalculationHistory() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => deleteCalculation(calc.id, true)}
+                                  disabled={deleteLoading === calc.id}
                                   title="Excluir cálculo"
                                 >
                                   <Trash2 className="h-4 w-4" />

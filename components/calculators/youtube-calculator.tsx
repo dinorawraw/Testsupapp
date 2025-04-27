@@ -3,6 +3,7 @@
 import type React from "react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -10,13 +11,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { FormLabel } from "@/components/ui/form"
 import { ArrowLeft } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 export function YoutubeCalculator() {
   const router = useRouter()
+  const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [formData, setFormData] = useState({
-    name: "", // Adicionado para salvar
+    name: "",
     subscribers: "",
     views: "",
     engagement: "",
@@ -27,8 +30,8 @@ export function YoutubeCalculator() {
   const [saveName, setSaveName] = useState("")
   const [loading, setLoading] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-  const [history, setHistory] = useState<any[]>([])
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
+  const supabase = createClientComponentClient()
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -161,23 +164,55 @@ export function YoutubeCalculator() {
 
   const saveCalculation = async () => {
     if (!saveName.trim()) {
-      alert("Por favor, digite um nome para este cálculo")
+      toast({
+        title: "Erro",
+        description: "Por favor, digite um nome para este cálculo",
+        variant: "destructive",
+      })
       return
     }
 
-    setLoading(true)
-
     try {
-      // Simulate saving to database
-      setTimeout(() => {
-        setLoading(false)
-        setShowSaveDialog(false)
-        setLastSavedAt(new Date().toLocaleTimeString())
-        alert("Cálculo salvo com sucesso!")
-      }, 1000)
-    } catch (error) {
+      setLoading(true)
+
+      // Get current user
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        throw new Error("Usuário não autenticado")
+      }
+
+      // Save to database
+      const { error: saveError } = await supabase.from("saved_calculations").insert({
+        user_id: userData.user.id,
+        name: saveName,
+        platform: "youtube",
+        data: {
+          subscribers: Number(formData.subscribers),
+          views: Number(formData.views),
+          engagement: Number(formData.engagement),
+          contentType: formData.contentType,
+        },
+        result: result.data.estimated_value,
+        created_at: new Date().toISOString(),
+      })
+
+      if (saveError) {
+        throw saveError
+      }
+
+      setShowSaveDialog(false)
+      setLastSavedAt(new Date().toLocaleTimeString())
+      toast({
+        title: "Cálculo salvo",
+        description: "Seu cálculo foi salvo com sucesso.",
+      })
+    } catch (error: any) {
       console.error("Erro ao salvar cálculo:", error)
-      alert("Não foi possível salvar o cálculo")
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao salvar cálculo",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }

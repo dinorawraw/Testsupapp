@@ -4,6 +4,7 @@ import { useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,6 +27,7 @@ const formSchema = z.object({
     message: "Por favor, digite um número válido de comentários.",
   }),
   hasDiscount: z.enum(["yes", "no"]),
+  name: z.string().min(3, "O nome deve ter pelo menos 3 caracteres").optional(),
 })
 
 export function TikTokCalculator() {
@@ -35,8 +37,8 @@ export function TikTokCalculator() {
   const [saveName, setSaveName] = useState("")
   const [loading, setLoading] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-  const [history, setHistory] = useState([])
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
+  const supabase = createClientComponentClient()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -46,6 +48,7 @@ export function TikTokCalculator() {
       likes: "",
       comments: "",
       hasDiscount: "no",
+      name: "",
     },
   })
 
@@ -110,17 +113,63 @@ export function TikTokCalculator() {
       return
     }
 
-    setLoading(true)
-    // Simulate saving to database
-    setTimeout(() => {
-      setLoading(false)
+    try {
+      setLoading(true)
+
+      // Get current user
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        throw new Error("Usuário não autenticado")
+      }
+
+      // Get form values
+      const formValues = form.getValues()
+      const followers = Number.parseInt(formValues.followers) || 0
+      const views = Number.parseInt(formValues.views) || 0
+      const likes = Number.parseInt(formValues.likes) || 0
+      const comments = Number.parseInt(formValues.comments) || 0
+      const hasDiscount = formValues.hasDiscount === "yes"
+
+      // Calculate engagement rate
+      const engagementRate = views > 0 ? ((likes + comments) / views) * 100 : 0
+
+      // Save to database
+      const { error: saveError } = await supabase.from("saved_calculations").insert({
+        user_id: userData.user.id,
+        name: saveName,
+        platform: "tiktok",
+        data: {
+          followers,
+          views,
+          likes,
+          comments,
+          engagement: engagementRate,
+          hasDiscount,
+        },
+        result: result || 0,
+        created_at: new Date().toISOString(),
+      })
+
+      if (saveError) {
+        throw saveError
+      }
+
       setShowSaveDialog(false)
       setLastSavedAt(new Date().toLocaleTimeString())
       toast({
         title: "Cálculo salvo",
         description: "Seu cálculo foi salvo com sucesso.",
       })
-    }, 1000)
+    } catch (error: any) {
+      console.error("Erro ao salvar cálculo:", error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao salvar cálculo",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const toggleHistory = () => {
