@@ -7,7 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BasicTools } from "@/components/dashboard/tools/basic-tools"
 import { AdvancedTools } from "@/components/dashboard/tools/advanced-tools"
 import { UserSettings } from "@/components/dashboard/user-settings"
-// Adicionar o import do SubscriberSpace
 import { SubscriberSpace } from "@/components/dashboard/subscriber-space"
 
 export function DashboardTabs() {

@@ -8,7 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 
-export function AnalyticsDashboard() {
+interface AnalyticsDashboardProps {
+  className?: string
+}
+
+export function AnalyticsDashboard({ className }: AnalyticsDashboardProps) {
   const { toast } = useToast()
   // This would be fetched from your API in a real application
   const [subscription, setSubscription] = useState({
@@ -27,7 +31,7 @@ export function AnalyticsDashboard() {
 
   if (subscription.tier !== "premium") {
     return (
-      <Card className="p-8">
+      <Card className={`p-8 ${className}`}>
         <div className="flex flex-col items-center justify-center space-y-4 text-center">
           <div className="rounded-full bg-primary/10 p-6">
             <LineChart className="h-12 w-12 text-primary" />
@@ -44,7 +48,7 @@ export function AnalyticsDashboard() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${className}`}>
       <Card>
         <CardHeader>
           <CardTitle>Stream Analytics</CardTitle>

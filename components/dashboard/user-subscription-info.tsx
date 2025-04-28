@@ -143,12 +143,12 @@ export function UserSubscriptionInfo() {
     <Card className="bg-muted/30 border-dashed gradient-border">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-medium text-white">Assinatura</CardTitle>
+          <CardTitle className="text-base font-medium">Assinatura</CardTitle>
           <Badge variant={subscription.tier === "premium" ? "default" : "outline"} className="text-xs font-semibold">
             {subscription.tier === "premium" ? "Premium" : "Gratuito"}
           </Badge>
         </div>
-        <CardDescription className="text-xs text-white">
+        <CardDescription className="text-xs">
           {subscription.tier === "premium"
             ? "Você tem acesso a todos os recursos premium"
             : "Atualize para premium para acesso completo a todos os recursos"}
@@ -160,16 +160,16 @@ export function UserSubscriptionInfo() {
             <>
               <Shield className="h-6 w-6 text-primary" />
               <div>
-                <p className="text-sm font-medium text-white">Assinatura Premium</p>
-                <p className="text-xs text-white/90">Renova em {subscription.renewalDate}</p>
+                <p className="text-sm font-medium">Assinatura Premium</p>
+                <p className="text-xs text-muted-foreground">Renova em {subscription.renewalDate}</p>
               </div>
             </>
           ) : (
             <>
               <CreditCard className="h-6 w-6 text-primary" />
               <div>
-                <p className="text-sm font-medium text-white">Plano Gratuito</p>
-                <p className="text-xs text-white/90">Acesso limitado a ferramentas e recursos</p>
+                <p className="text-sm font-medium">Plano Gratuito</p>
+                <p className="text-xs text-muted-foreground">Acesso limitado a ferramentas e recursos</p>
               </div>
             </>
           )}
@@ -181,18 +181,13 @@ export function UserSubscriptionInfo() {
             variant="outline"
             size="sm"
             onClick={handleManageSubscription}
-            className="text-xs font-medium text-white bg-gray-800 hover:bg-gray-700 border-gray-700"
+            className="text-xs font-medium"
             disabled={isLoading}
           >
             {isLoading ? "Carregando..." : "Gerenciar Assinatura"}
           </Button>
         ) : (
-          <Button
-            size="sm"
-            onClick={handleUpgrade}
-            className="text-xs font-medium bg-primary hover:bg-primary/90 text-white"
-            disabled={isLoading}
-          >
+          <Button size="sm" onClick={handleUpgrade} className="text-xs font-medium" disabled={isLoading}>
             {isLoading ? "Carregando..." : "Atualizar para Premium"}
           </Button>
         )}
