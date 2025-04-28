@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
@@ -8,8 +9,41 @@ import { DashboardTabs } from "@/components/dashboard/dashboard-tabs"
 import { SubscriberSpace } from "@/components/dashboard/subscriber-space"
 import { UserSubscriptionInfo } from "@/components/dashboard/user-subscription-info"
 import { CalculationHistory } from "@/components/dashboard/calculation-history"
-import { ExportData } from "@/components/dashboard/export-data"
-import { getAllSavedCalculations } from "@/lib/supabase/database"
+import { getAllSavedCalculations, getCalculationsByUserId } from "@/lib/supabase/database"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
+
+// Componente de fallback para erros
+function ErrorFallback() {
+  return (
+    <Alert variant="destructive" className="mb-6">
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle>Erro</AlertTitle>
+      <AlertDescription>
+        Não foi possível carregar os cálculos salvos. Por favor, tente novamente mais tarde.
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+// Componente para carregar os cálculos
+async function CalculationsLoader({ userId }: { userId: string }) {
+  try {
+    // Tente buscar os cálculos salvos
+    const { data: savedCalculations, success } = await getAllSavedCalculations(userId)
+
+    // Se falhar, tente buscar os cálculos da tabela original como fallback
+    if (!success || !savedCalculations || savedCalculations.length === 0) {
+      const oldCalculations = await getCalculationsByUserId(userId)
+      return <CalculationHistory calculations={oldCalculations || []} />
+    }
+
+    return <CalculationHistory calculations={savedCalculations} />
+  } catch (error) {
+    console.error("Erro ao carregar cálculos:", error)
+    return <ErrorFallback />
+  }
+}
 
 export default async function DashboardPage() {
   const supabase = createServerComponentClient({ cookies })
@@ -21,9 +55,6 @@ export default async function DashboardPage() {
   if (!session) {
     redirect("/login")
   }
-
-  // Buscar cálculos salvos
-  const { data: savedCalculations } = await getAllSavedCalculations(session.user.id)
 
   return (
     <DashboardShell>
@@ -41,9 +72,10 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <CalculationHistory calculations={savedCalculations || []} />
-        <ExportData />
+      <div className="mt-6">
+        <Suspense fallback={<div>Carregando histórico de cálculos...</div>}>
+          <CalculationsLoader userId={session.user.id} />
+        </Suspense>
       </div>
     </DashboardShell>
   )

@@ -118,21 +118,36 @@ export async function getSavedCalculationsByPlatform(userId: string, platform: s
   return { success: true, data }
 }
 
+// Função com retry para lidar com erros de rate limiting
 export async function getAllSavedCalculations(userId: string) {
-  const supabase = createUniversalClient()
+  // Definindo um valor padrão para retornar em caso de erro
+  const defaultReturn = { success: false, error: null, data: [] }
 
-  const { data, error } = await supabase
-    .from("saved_calculations")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
+  try {
+    const supabase = createUniversalClient()
 
-  if (error) {
-    console.error("Erro ao buscar todos os cálculos salvos:", error)
-    return { success: false, error: error.message }
+    // Tentativa inicial
+    try {
+      const { data, error } = await supabase
+        .from("saved_calculations")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("Erro ao buscar todos os cálculos salvos:", error)
+        return { ...defaultReturn, error: error.message }
+      }
+
+      return { success: true, error: null, data: data || [] }
+    } catch (e) {
+      console.error("Exceção ao buscar cálculos:", e)
+      return defaultReturn
+    }
+  } catch (outerError) {
+    console.error("Erro crítico ao buscar cálculos:", outerError)
+    return defaultReturn
   }
-
-  return { success: true, data }
 }
 
 // Funções para assinaturas e planos

@@ -6,52 +6,44 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 
-interface LogoutButtonProps {
-  variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"
-  size?: "default" | "sm" | "lg" | "icon"
-  className?: string
-}
-
-export function LogoutButton({ variant = "destructive", size = "default", className = "" }: LogoutButtonProps) {
-  const [loading, setLoading] = useState(false)
+export function LogoutButton() {
   const router = useRouter()
   const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
   const supabase = createClientComponentClient()
 
-  const handleLogout = async () => {
-    setLoading(true)
+  async function handleLogout() {
+    setIsLoading(true)
 
     try {
       const { error } = await supabase.auth.signOut()
 
       if (error) {
-        console.error("Erro ao fazer logout:", error)
-        toast({
-          title: "Erro ao fazer logout",
-          description: "Ocorreu um erro ao tentar desconectar. Tente novamente.",
-          variant: "destructive",
-        })
         throw error
       }
 
       toast({
-        title: "Logout realizado",
-        description: "Você foi desconectado com sucesso.",
+        title: "Logout bem-sucedido",
+        description: "Você saiu com sucesso.",
       })
 
-      console.log("Logout bem-sucedido")
       router.push("/")
       router.refresh()
-    } catch (error) {
-      console.error("Falha ao fazer logout:", error)
+    } catch (error: any) {
+      console.error("Erro ao fazer logout:", error)
+      toast({
+        title: "Erro ao fazer logout",
+        description: error.message || "Falha ao fazer logout. Tente novamente.",
+        variant: "destructive",
+      })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
   return (
-    <Button onClick={handleLogout} disabled={loading} variant={variant} size={size} className={className}>
-      {loading ? "Saindo..." : "Sair"}
+    <Button onClick={handleLogout} disabled={isLoading} variant="destructive">
+      {isLoading ? "Saindo..." : "Sair"}
     </Button>
   )
 }
