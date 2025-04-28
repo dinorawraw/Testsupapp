@@ -1,250 +1,121 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Lightbulb, BarChart2, MessageSquare, Lock } from "lucide-react"
-
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { useToast } from "@/hooks/use-toast"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { IdeaBoard } from "@/components/subscriber/idea-board"
-import { InsightsBlog } from "@/components/subscriber/insights-blog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PersonalConsultation } from "@/components/subscriber/personal-consultation"
+import { InsightsBlog } from "@/components/subscriber/insights-blog"
+import { IdeaBoard } from "@/components/subscriber/idea-board"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useRouter } from "next/navigation"
 
 export function SubscriberSpace() {
-  const { toast } = useToast()
-  const [subscription, setSubscription] = useState({
-    tier: "loading", // "loading", "free", ou "premium"
-    isLoading: true,
-  })
-  const [activeDialog, setActiveDialog] = useState<"ideas" | "insights" | "consultation" | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [isPremium, setIsPremium] = useState<boolean | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
   const supabase = createClientComponentClient()
 
-  // Buscar o status da assinatura do usuário
   useEffect(() => {
-    async function fetchSubscriptionStatus() {
+    async function checkSubscription() {
       try {
-        setError(null)
+        setIsLoading(true)
 
         // Obter o usuário atual
         const {
           data: { user },
-          error: userError,
         } = await supabase.auth.getUser()
 
-        if (userError || !user) {
-          console.error("Erro ao obter usuário:", userError)
-          setSubscription({ tier: "free", isLoading: false })
+        if (!user) {
+          setIsPremium(false)
           return
         }
 
-        // Buscar assinatura ativa do usuário
-        const { data: subscriptionData, error: subscriptionError } = await supabase
+        // Verificar se o usuário tem uma assinatura ativa
+        const { data: subscription, error } = await supabase
           .from("subscriptions")
-          .select(`
-            *,
-            subscription_plans(*)
-          `)
+          .select("status")
           .eq("user_id", user.id)
-          .eq("status", "active")
           .single()
 
-        if (subscriptionError && subscriptionError.code !== "PGRST116") {
-          console.error("Erro ao buscar assinatura:", subscriptionError)
-          setSubscription({ tier: "free", isLoading: false })
-          return
+        if (error && error.code !== "PGRST116") {
+          console.error("Erro ao verificar assinatura:", error)
         }
 
-        // Verificar se o usuário tem assinatura premium
-        const isPremium = subscriptionData?.subscription_plans?.name === "premium"
-        setSubscription({
-          tier: isPremium ? "premium" : "free",
-          isLoading: false,
-        })
-
-        console.log("Status da assinatura:", isPremium ? "premium" : "free")
+        setIsPremium(subscription?.status === "active")
       } catch (error) {
-        console.error("Erro ao verificar assinatura:", error)
-        setError("Não foi possível verificar seu status de assinatura.")
-        setSubscription({ tier: "free", isLoading: false })
+        console.error("Erro ao verificar status premium:", error)
+        setIsPremium(false)
+      } finally {
+        setIsLoading(false)
       }
     }
 
-    fetchSubscriptionStatus()
+    checkSubscription()
   }, [supabase])
 
-  const handlePremiumFeature = (feature: "ideas" | "insights" | "consultation") => {
-    if (subscription.tier !== "premium") {
-      toast({
-        title: "Recurso Premium",
-        description: "Este recurso está disponível apenas para assinantes premium.",
-        variant: "destructive",
-      })
-    } else {
-      setActiveDialog(feature)
-    }
-  }
-
-  const handleUpgrade = () => {
-    window.location.href = "/payment"
-  }
-
-  if (subscription.isLoading) {
+  if (isLoading) {
     return (
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold text-white">Espaço do Assinante</h2>
-        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="gradient-border opacity-70">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-white">Carregando...</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm text-white mb-4">Carregando recursos...</div>
-                <div className="w-full h-8 bg-gray-700 rounded animate-pulse"></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Espaço do Assinante</CardTitle>
+          <CardDescription>Carregando recursos premium...</CardDescription>
+        </CardHeader>
+        <CardContent className="h-40 flex items-center justify-center">
+          <div className="animate-pulse">Carregando...</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (isPremium === false) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Espaço do Assinante</CardTitle>
+          <CardDescription>Recursos exclusivos para assinantes premium</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <p>Faça upgrade para acessar recursos exclusivos:</p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>Consultorias personalizadas</li>
+              <li>Blog de insights exclusivos</li>
+              <li>Quadro de ideias e sugestões</li>
+            </ul>
+          </div>
+        </CardContent>
+        <CardFooter>
+          <Button onClick={() => router.push("/payment")}>Fazer Upgrade</Button>
+        </CardFooter>
+      </Card>
     )
   }
 
   return (
-    <>
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold text-white">Espaço do Assinante</h2>
-          {subscription.tier !== "premium" && (
-            <Button
-              onClick={handleUpgrade}
-              variant="default"
-              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
-            >
-              Fazer Upgrade para Premium
-            </Button>
-          )}
-        </div>
-
-        {error && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {subscription.tier !== "premium" && (
-          <Alert className="mb-4 bg-amber-100 text-amber-800 border-amber-200">
-            <AlertDescription>
-              Você está usando uma conta gratuita. Faça upgrade para acessar todos os recursos premium.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-3">
-          <Card className={`gradient-border ${subscription.tier !== "premium" ? "opacity-75" : ""}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-white">Board de Ideias</CardTitle>
-              {subscription.tier !== "premium" ? (
-                <Lock className="h-4 w-4 text-white" />
-              ) : (
-                <Lightbulb className="h-4 w-4 text-white" />
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm text-white mb-4">Obtenha ideias de conteúdo para suas redes sociais</div>
-              <Button
-                className="w-full text-white"
-                variant={subscription.tier === "premium" ? "default" : "outline"}
-                onClick={() => handlePremiumFeature("ideas")}
-              >
-                {subscription.tier === "premium" ? "Acessar Ideias" : "Recurso Premium"}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className={`gradient-border ${subscription.tier !== "premium" ? "opacity-75" : ""}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-white">Insights</CardTitle>
-              {subscription.tier !== "premium" ? (
-                <Lock className="h-4 w-4 text-white" />
-              ) : (
-                <BarChart2 className="h-4 w-4 text-white" />
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm text-white mb-4">Análises e posts sobre conteúdo e tendências</div>
-              <Button
-                className="w-full text-white"
-                variant={subscription.tier === "premium" ? "default" : "outline"}
-                onClick={() => handlePremiumFeature("insights")}
-              >
-                {subscription.tier === "premium" ? "Ver Insights" : "Recurso Premium"}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className={`gradient-border ${subscription.tier !== "premium" ? "opacity-75" : ""}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-white">Consultoria Personalizada</CardTitle>
-              {subscription.tier !== "premium" ? (
-                <Lock className="h-4 w-4 text-white" />
-              ) : (
-                <MessageSquare className="h-4 w-4 text-white" />
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm text-white mb-4">Agende uma sessão de consultoria com nossos especialistas</div>
-              <Button
-                className="w-full text-white"
-                variant={subscription.tier === "premium" ? "default" : "outline"}
-                onClick={() => handlePremiumFeature("consultation")}
-              >
-                {subscription.tier === "premium" ? "Agendar Consultoria" : "Recurso Premium"}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Diálogo para o Board de Ideias */}
-      <Dialog open={activeDialog === "ideas"} onOpenChange={(open) => !open && setActiveDialog(null)}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-white">Board de Ideias</DialogTitle>
-            <DialogDescription className="text-white">
-              Explore ideias de conteúdo para suas redes sociais
-            </DialogDescription>
-          </DialogHeader>
-          <IdeaBoard />
-        </DialogContent>
-      </Dialog>
-
-      {/* Diálogo para Insights */}
-      <Dialog open={activeDialog === "insights"} onOpenChange={(open) => !open && setActiveDialog(null)}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-white">Insights</DialogTitle>
-            <DialogDescription className="text-white">Análises e posts sobre conteúdo e tendências</DialogDescription>
-          </DialogHeader>
-          <InsightsBlog />
-        </DialogContent>
-      </Dialog>
-
-      {/* Diálogo para Consultoria Personalizada */}
-      <Dialog open={activeDialog === "consultation"} onOpenChange={(open) => !open && setActiveDialog(null)}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-white">Consultoria Personalizada</DialogTitle>
-            <DialogDescription className="text-white">
-              Chat exclusivo para consultoria com nossos especialistas
-            </DialogDescription>
-          </DialogHeader>
-          <PersonalConsultation />
-        </DialogContent>
-      </Dialog>
-    </>
+    <Card>
+      <CardHeader>
+        <CardTitle>Espaço do Assinante</CardTitle>
+        <CardDescription>Recursos exclusivos para assinantes premium</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Tabs defaultValue="consultations">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="consultations">Consultorias</TabsTrigger>
+            <TabsTrigger value="insights">Insights</TabsTrigger>
+            <TabsTrigger value="ideas">Ideias</TabsTrigger>
+          </TabsList>
+          <TabsContent value="consultations" className="mt-4">
+            <PersonalConsultation />
+          </TabsContent>
+          <TabsContent value="insights" className="mt-4">
+            <InsightsBlog />
+          </TabsContent>
+          <TabsContent value="ideas" className="mt-4">
+            <IdeaBoard />
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -10,13 +10,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 const formSchema = z.object({
   email: z.string().email({
     message: "Por favor, digite um endereço de e-mail válido.",
   }),
-  password: z.string().min(8, {
-    message: "A senha deve ter pelo menos 8 caracteres.",
+  password: z.string().min(6, {
+    message: "A senha deve ter pelo menos 6 caracteres.",
   }),
 })
 
@@ -25,9 +26,9 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ callbackUrl = "/dashboard" }: LoginFormProps) {
-  const router = useRouter()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
+  const supabase = createClientComponentClient()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -41,34 +42,45 @@ export function LoginForm({ callbackUrl = "/dashboard" }: LoginFormProps) {
     setIsLoading(true)
 
     try {
-      // Check if the user is an admin
-      if (values.email === "contato@dinoraw.com.br") {
-        // Simulate successful admin login
-        setTimeout(() => {
-          toast({
-            title: "Login de Administrador",
-            description: "Bem-vindo ao painel de administração.",
-          })
-          router.push("/admin")
-        }, 1000)
-      } else {
-        // Regular user login
-        // This would be replaced with your actual authentication logic
-        console.log("Login values:", values)
+      // Autenticar com Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      })
 
-        // Simulate successful login
-        setTimeout(() => {
-          toast({
-            title: "Sucesso",
-            description: "Você entrou com sucesso.",
-          })
-          router.push(callbackUrl)
-        }, 1000)
+      if (error) {
+        throw error
       }
-    } catch (error) {
+
+      // Verificar se o usuário é admin
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .single()
+
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Erro ao verificar perfil:", profileError)
+      }
+
+      const isAdmin = profileData?.role === "admin" || values.email === "contato@dinoraw.com.br"
+
       toast({
-        title: "Erro",
-        description: "E-mail ou senha inválidos. Por favor, tente novamente.",
+        title: "Login bem-sucedido",
+        description: "Você entrou com sucesso.",
+      })
+
+      // Redirecionar com base no papel do usuário
+      if (isAdmin) {
+        window.location.href = "/admin"
+      } else {
+        window.location.href = callbackUrl
+      }
+    } catch (error: any) {
+      console.error("Erro de login:", error)
+      toast({
+        title: "Erro de login",
+        description: error.message || "Falha ao fazer login. Verifique suas credenciais.",
         variant: "destructive",
       })
     } finally {
@@ -76,19 +88,28 @@ export function LoginForm({ callbackUrl = "/dashboard" }: LoginFormProps) {
     }
   }
 
-  const handleSocialLogin = (provider: string) => {
-    setIsLoading(true)
-    // This would be replaced with your actual social login logic
-    console.log(`Fazendo login com ${provider}`)
-
-    // Simulate successful login
-    setTimeout(() => {
-      toast({
-        title: "Sucesso",
-        description: `Você entrou com sucesso usando ${provider}.`,
+  async function handleSocialLogin(provider: "google") {
+    try {
+      setIsLoading(true)
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?redirectTo=${callbackUrl}`,
+        },
       })
-      router.push(callbackUrl)
-    }, 1000)
+
+      if (error) {
+        throw error
+      }
+    } catch (error: any) {
+      console.error("Erro de login social:", error)
+      toast({
+        title: "Erro de login",
+        description: error.message || `Falha ao fazer login com ${provider}.`,
+        variant: "destructive",
+      })
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -121,6 +142,11 @@ export function LoginForm({ callbackUrl = "/dashboard" }: LoginFormProps) {
               </FormItem>
             )}
           />
+          <div className="flex items-center justify-between">
+            <Link href="/forgot-password" className="text-sm text-blue-400 hover:text-blue-300">
+              Esqueceu a senha?
+            </Link>
+          </div>
           <Button type="submit" className="w-full text-white" disabled={isLoading}>
             {isLoading ? "Entrando..." : "Entrar"}
           </Button>
@@ -139,7 +165,7 @@ export function LoginForm({ callbackUrl = "/dashboard" }: LoginFormProps) {
           variant="outline"
           type="button"
           disabled={isLoading}
-          onClick={() => handleSocialLogin("Google")}
+          onClick={() => handleSocialLogin("google")}
           className="text-white"
         >
           <svg role="img" viewBox="0 0 24 24" className="mr-2 h-4 w-4">
@@ -150,6 +176,12 @@ export function LoginForm({ callbackUrl = "/dashboard" }: LoginFormProps) {
           </svg>
           Google
         </Button>
+      </div>
+      <div className="text-center text-sm text-white">
+        Não tem uma conta?{" "}
+        <Link href="/register" className="text-blue-400 hover:text-blue-300">
+          Registre-se
+        </Link>
       </div>
     </div>
   )

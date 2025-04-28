@@ -1,13 +1,13 @@
 "use server"
 
-import { createServerActionClient } from "@/lib/supabase/client"
 import { revalidatePath } from "next/cache"
+import { createServerActionClient } from "@/lib/supabase/server-actions"
 
 interface YoutubeCalculationData {
+  subscribers: number
   views: number
-  cpm: number
-  watchTime: number
-  estimatedEarnings: number
+  engagement: number
+  result: number
 }
 
 export async function saveYoutubeCalculation(data: YoutubeCalculationData) {
@@ -20,36 +20,34 @@ export async function saveYoutubeCalculation(data: YoutubeCalculationData) {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      return { success: false, error: "Usuário não autenticado" }
+      throw new Error("Usuário não autenticado")
     }
 
     // Salvar o cálculo
-    const { error } = await supabase.from("calculations").insert([
-      {
-        user_id: user.id,
-        type: "youtube",
-        data: {
-          views: data.views,
-          cpm: data.cpm,
-          watch_time: data.watchTime,
-          estimated_earnings: data.estimatedEarnings,
-        },
-        result: data.estimatedEarnings,
+    const { error } = await supabase.from("calculations").insert({
+      user_id: user.id,
+      type: "youtube",
+      data: {
+        subscribers: data.subscribers,
+        views: data.views,
+        engagement: data.engagement,
+        result: data.result,
       },
-    ])
+      created_at: new Date().toISOString(),
+    })
 
     if (error) {
-      console.error("Erro ao salvar cálculo do YouTube:", error)
-      return { success: false, error: error.message }
+      console.error("Erro ao salvar cálculo:", error)
+      throw error
     }
 
-    // Revalidar o caminho para atualizar os dados
+    // Revalidar o caminho do dashboard para mostrar o novo cálculo
     revalidatePath("/dashboard")
     revalidatePath("/calculators/youtube")
 
     return { success: true }
-  } catch (error: any) {
-    console.error("Erro ao processar cálculo do YouTube:", error)
-    return { success: false, error: error.message }
+  } catch (error) {
+    console.error("Erro ao salvar cálculo do YouTube:", error)
+    return { success: false, error }
   }
 }

@@ -1,0 +1,393 @@
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
+export interface Database {
+  public: {
+    Tables: {
+      blog_posts: {
+        Row: {
+          author_avatar: string | null
+          author_id: string | null
+          author_name: string | null
+          content: string | null
+          cover_image: string | null
+          created_at: string | null
+          excerpt: string | null
+          has_video: boolean | null
+          id: number
+          published_at: string | null
+          read_time: number | null
+          tags: string[] | null
+          title: string | null
+          video_embed: string | null
+        }
+        Insert: {
+          author_avatar?: string | null
+          author_id?: string | null
+          author_name?: string | null
+          content?: string | null
+          cover_image?: string | null
+          created_at?: string | null
+          excerpt?: string | null
+          has_video?: boolean | null
+          id?: number
+          published_at?: string | null
+          read_time?: number | null
+          tags?: string[] | null
+          title?: string | null
+          video_embed?: string | null
+        }
+        Update: {
+          author_avatar?: string | null
+          author_id?: string | null
+          author_name?: string | null
+          content?: string | null
+          cover_image?: string | null
+          created_at?: string | null
+          excerpt?: string | null
+          has_video?: boolean | null
+          id?: number
+          published_at?: string | null
+          read_time?: number | null
+          tags?: string[] | null
+          title?: string | null
+          video_embed?: string | null
+        }
+        Relationships: []
+      }
+      calculations: {
+        Row: {
+          comments: number | null
+          content_type: string | null
+          created_at: string
+          data: Json | null
+          estimated_value: number
+          followers: number | null
+          has_discount: boolean | null
+          id: string
+          likes: number | null
+          platform: string | null
+          type: string | null
+          user_id: string
+          views: number | null
+        }
+        Insert: {
+          comments?: number | null
+          content_type?: string | null
+          created_at?: string
+          data?: Json | null
+          estimated_value: number
+          followers?: number | null
+          has_discount?: boolean | null
+          id?: string
+          likes?: number | null
+          platform?: string | null
+          type?: string | null
+          user_id: string
+          views?: number | null
+        }
+        Update: {
+          comments?: number | null
+          content_type?: string | null
+          created_at?: string
+          data?: Json | null
+          estimated_value?: number
+          followers?: number | null
+          has_discount?: boolean | null
+          id?: string
+          likes?: number | null
+          platform?: string | null
+          type?: string | null
+          user_id?: string
+          views?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calculations_user_id_fkey"
+            columns: ["user_id"]
+            isOne: false
+            isOther: false
+            tableName: "users"
+          }
+        ]
+      }
+      consultation_messages: {
+        Row: {
+          attachments: Json | null
+          content: string | null
+          consultation_id: number
+          created_at: string
+          id: number
+          is_read: boolean
+          sender: string | null
+          sender_id: string | null
+          timestamp: string
+        }
+        Insert: {
+          attachments?: Json | null
+          content?: string | null
+          consultation_id: number
+          created_at?: string
+          id?: number
+          is_read?: boolean
+          sender?: string | null
+          sender_id?: string | null
+          timestamp?: string
+        }
+        Update: {
+          attachments?: Json | null
+          content?: string | null
+          consultation_id?: number
+          created_at?: string
+          id?: number
+          is_read?: boolean
+          sender?: string | null
+          sender_id?: string | null
+          timestamp?: string
+        }
+        Relationships: []
+      }
+      consultations: {
+        Row: {
+          created_at: string
+          id: number
+          scheduled_date: string | null
+          status: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          scheduled_date?: string | null
+          status?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          scheduled_date?: string | null
+          status?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ideas: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: number
+          tags: string[] | null
+          title: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: number
+          tags?: string[] | null
+          title?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: number
+          tags?: string[] | null
+          title?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            isOne: true
+            isOther: false
+            tableName: "users"
+          }
+        ]
+      }
+      saved_calculations: {
+        Row: {
+          created_at: string
+          data: Json | null
+          id: string
+          name: string | null
+          platform: string | null
+          result: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          name?: string | null
+          platform?: string | null
+          result?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          name?: string | null
+          platform?: string | null
+          result?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      subscription_plans: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          features: Json | null
+          id: number
+          interval: string | null
+          name: string | null
+          price: number | null
+          stripe_price_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          features?: Json | null
+          id?: number
+          interval?: string | null
+          name?: string | null
+          price?: number | null
+          stripe_price_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          features?: Json | null
+          id?: number
+          interval?: string | null
+          name?: string | null
+          price?: number | null
+          stripe_price_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          amount: string | null
+          cancel_at_period_end: boolean | null
+          canceled_at: string | null
+          created_at: string | null
+          current_period_end: string | null
+          current_period_start: string | null
+          id: number
+          plan_id: number | null
+          price_id: string | null
+          status: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount?: string | null
+          cancel_at_period_end?: boolean | null
+          canceled_at?: string | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: number
+          plan_id?: number | null
+          price_id?: string | null
+          status?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: string | null
+          cancel_at_period_end?: boolean | null
+          canceled_at?: string | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: number
+          plan_id?: number | null
+          price_id?: string | null
+          status?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOne: false
+            isOther: false
+            tableName: "subscription_plans"
+          },
+          {
+            foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOne: false
+            isOther: false
+            tableName: "users"
+          }
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}

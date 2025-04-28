@@ -2,6 +2,9 @@ import { createServerActionClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import type { Database } from "../database.types"
 
+// Exportando createServerActionClient como uma exportação nomeada
+export { createServerActionClient }
+
 // Esta função só deve ser usada no App Router (app/)
 export const createServerActionSupabaseClient = () => {
   return createServerActionClient<Database>({ cookies })
