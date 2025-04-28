@@ -1,4 +1,3 @@
-import { Suspense } from "react"
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
@@ -9,7 +8,7 @@ import { DashboardTabs } from "@/components/dashboard/dashboard-tabs"
 import { SubscriberSpace } from "@/components/dashboard/subscriber-space"
 import { UserSubscriptionInfo } from "@/components/dashboard/user-subscription-info"
 import { CalculationHistory } from "@/components/dashboard/calculation-history"
-import { getAllSavedCalculations, getCalculationsByUserId } from "@/lib/supabase/database"
+import { createUniversalClient } from "@/lib/supabase/universal-client"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 
@@ -26,22 +25,21 @@ function ErrorFallback() {
   )
 }
 
-// Componente para carregar os cálculos
-async function CalculationsLoader({ userId }: { userId: string }) {
+async function getCalculations(userId: string) {
   try {
-    // Tente buscar os cálculos salvos
-    const { data: savedCalculations, success } = await getAllSavedCalculations(userId)
+    const supabase = createUniversalClient()
 
-    // Se falhar, tente buscar os cálculos da tabela original como fallback
-    if (!success || !savedCalculations || savedCalculations.length === 0) {
-      const oldCalculations = await getCalculationsByUserId(userId)
-      return <CalculationHistory calculations={oldCalculations || []} />
-    }
+    // Get all calculations
+    const { data } = await supabase
+      .from("calculations")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
 
-    return <CalculationHistory calculations={savedCalculations} />
+    return data || []
   } catch (error) {
-    console.error("Erro ao carregar cálculos:", error)
-    return <ErrorFallback />
+    console.error("Erro ao buscar cálculos:", error)
+    return []
   }
 }
 
@@ -56,10 +54,12 @@ export default async function DashboardPage() {
     redirect("/login")
   }
 
+  const calculations = await getCalculations(session.user.id)
+
   return (
     <DashboardShell>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <AnalyticsDashboard />
+        <AnalyticsDashboard className="col-span-full" />
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <div className="col-span-4">
@@ -73,9 +73,13 @@ export default async function DashboardPage() {
         </div>
       </div>
       <div className="mt-6">
-        <Suspense fallback={<div>Carregando histórico de cálculos...</div>}>
-          <CalculationsLoader userId={session.user.id} />
-        </Suspense>
+        {calculations.length > 0 ? (
+          <CalculationHistory calculations={calculations} />
+        ) : (
+          <div className="text-center p-6 bg-muted rounded-lg">
+            <p>Nenhum cálculo encontrado. Experimente usar nossas calculadoras!</p>
+          </div>
+        )}
       </div>
     </DashboardShell>
   )

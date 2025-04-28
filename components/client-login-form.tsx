@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { createClientComponentClient } from "@/lib/supabase/client"
 
 const formSchema = z.object({
   email: z.string().email({
@@ -70,11 +70,11 @@ export function ClientLoginForm() {
         description: "Você entrou com sucesso.",
       })
 
-      // Redirecionar com base no papel do usuário
+      // Forçar recarregamento da página para garantir que a sessão seja reconhecida
       if (isAdmin) {
-        router.push("/admin")
+        window.location.href = "/admin"
       } else {
-        router.push(redirectTo)
+        window.location.href = redirectTo
       }
     } catch (error: any) {
       console.error("Erro de login:", error)

@@ -55,7 +55,7 @@ export async function middleware(request: NextRequest) {
       }
 
       // Se for a rota de login e houver sessão, redirecionar para o dashboard ou admin
-      if (requestUrl.pathname === "/login") {
+      if (requestUrl.pathname === "/login" && request.method === "GET") {
         if (isAdmin || isAdminEmail) {
           console.log("Middleware - Redirecionando para admin (usuário é admin)")
           return NextResponse.redirect(new URL("/admin", requestUrl.origin))

@@ -1,54 +1,55 @@
 "use server"
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { createServerActionClient } from "@/lib/supabase/client"
 import { revalidatePath } from "next/cache"
 
-export async function saveYoutubeCalculation(formData: FormData) {
-  try {
-    const supabase = createClientComponentClient()
+interface YoutubeCalculationData {
+  views: number
+  cpm: number
+  watchTime: number
+  estimatedEarnings: number
+}
 
-    // Obter a sessão atual
-    const { data: sessionData } = await supabase.auth.getSession()
-    if (!sessionData.session) {
+export async function saveYoutubeCalculation(data: YoutubeCalculationData) {
+  try {
+    const supabase = createServerActionClient()
+
+    // Obter o usuário atual
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
       return { success: false, error: "Usuário não autenticado" }
     }
 
-    const userId = sessionData.session.user.id
-
-    // Extrair dados do FormData
-    const subscribers = formData.get("subscribers") ? Number(formData.get("subscribers")) : 0
-    const views = formData.get("views") ? Number(formData.get("views")) : 0
-    const engagement = formData.get("engagement") ? Number(formData.get("engagement")) : 0
-    const valuePerVideo = formData.get("valuePerVideo") ? Number(formData.get("valuePerVideo")) : 0
-    const valuePerShort = formData.get("valuePerShort") ? Number(formData.get("valuePerShort")) : 0
-
-    // Inserir na tabela de cálculos
-    const { data, error } = await supabase.from("calculations").insert([
+    // Salvar o cálculo
+    const { error } = await supabase.from("calculations").insert([
       {
-        user_id: userId,
-        platform: "youtube",
+        user_id: user.id,
+        type: "youtube",
         data: {
-          subscribers,
-          views,
-          engagement,
-          valuePerVideo,
-          valuePerShort,
+          views: data.views,
+          cpm: data.cpm,
+          watch_time: data.watchTime,
+          estimated_earnings: data.estimatedEarnings,
         },
-        created_at: new Date().toISOString(),
+        result: data.estimatedEarnings,
       },
     ])
 
     if (error) {
-      console.error("Erro ao salvar cálculo:", error)
+      console.error("Erro ao salvar cálculo do YouTube:", error)
       return { success: false, error: error.message }
     }
 
     // Revalidar o caminho para atualizar os dados
     revalidatePath("/dashboard")
+    revalidatePath("/calculators/youtube")
 
     return { success: true }
   } catch (error: any) {
-    console.error("Erro ao processar solicitação:", error)
-    return { success: false, error: error.message || "Erro desconhecido" }
+    console.error("Erro ao processar cálculo do YouTube:", error)
+    return { success: false, error: error.message }
   }
 }
