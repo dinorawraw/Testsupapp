@@ -1,53 +1,54 @@
 "use server"
 
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { revalidatePath } from "next/cache"
-import { createServerActionClient } from "@/lib/supabase/server-actions"
 
-interface YoutubeCalculationData {
-  subscribers: number
-  views: number
-  engagement: number
-  result: number
-}
-
-export async function saveYoutubeCalculation(data: YoutubeCalculationData) {
+export async function saveYoutubeCalculation(formData: FormData) {
   try {
-    const supabase = createServerActionClient()
+    const supabase = createClientComponentClient()
 
-    // Obter o usuário atual
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      throw new Error("Usuário não autenticado")
+    // Obter a sessão atual
+    const { data: sessionData } = await supabase.auth.getSession()
+    if (!sessionData.session) {
+      return { success: false, error: "Usuário não autenticado" }
     }
 
-    // Salvar o cálculo
-    const { error } = await supabase.from("calculations").insert({
-      user_id: user.id,
-      type: "youtube",
-      data: {
-        subscribers: data.subscribers,
-        views: data.views,
-        engagement: data.engagement,
-        result: data.result,
+    const userId = sessionData.session.user.id
+
+    // Extrair dados do FormData
+    const subscribers = formData.get("subscribers") ? Number(formData.get("subscribers")) : 0
+    const views = formData.get("views") ? Number(formData.get("views")) : 0
+    const engagement = formData.get("engagement") ? Number(formData.get("engagement")) : 0
+    const valuePerVideo = formData.get("valuePerVideo") ? Number(formData.get("valuePerVideo")) : 0
+    const valuePerShort = formData.get("valuePerShort") ? Number(formData.get("valuePerShort")) : 0
+
+    // Inserir na tabela de cálculos
+    const { data, error } = await supabase.from("calculations").insert([
+      {
+        user_id: userId,
+        platform: "youtube",
+        data: {
+          subscribers,
+          views,
+          engagement,
+          valuePerVideo,
+          valuePerShort,
+        },
+        created_at: new Date().toISOString(),
       },
-      created_at: new Date().toISOString(),
-    })
+    ])
 
     if (error) {
       console.error("Erro ao salvar cálculo:", error)
-      throw error
+      return { success: false, error: error.message }
     }
 
-    // Revalidar o caminho do dashboard para mostrar o novo cálculo
+    // Revalidar o caminho para atualizar os dados
     revalidatePath("/dashboard")
-    revalidatePath("/calculators/youtube")
 
     return { success: true }
-  } catch (error) {
-    console.error("Erro ao salvar cálculo do YouTube:", error)
-    return { success: false, error }
+  } catch (error: any) {
+    console.error("Erro ao processar solicitação:", error)
+    return { success: false, error: error.message || "Erro desconhecido" }
   }
 }
